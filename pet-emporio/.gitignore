@@ -1,0 +1,61 @@
+# ─── Virtual Environment ──────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ─── Environment Variables (secrets) ─────────────────────────────────────────
+.env
+*.env
+!.env.example
+
+# ─── RSA Keys ─────────────────────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# ─── Pytest / Coverage ────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+
+# ─── Alembic ──────────────────────────────────────────────────────────────────
+# Keep migrations but ignore any local override files
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+*.log
+
+# ─── Reports / Generated files ────────────────────────────────────────────────
+zap-report.html
+*.pdf
+*.xlsx
+/reports/
+
+# ─── Node (frontend) ──────────────────────────────────────────────────────────
+node_modules/
+.next/
+.nuxt/
+dist/

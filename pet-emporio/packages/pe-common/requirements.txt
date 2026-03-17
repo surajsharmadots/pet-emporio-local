@@ -1,0 +1,10 @@
+fastapi>=0.111
+pydantic>=2.7
+pyjwt[cryptography]>=2.8
+httpx>=0.27
+aio-pika>=9.4
+structlog>=24
+opentelemetry-sdk>=1.24
+opentelemetry-exporter-otlp-proto-grpc>=1.24
+opentelemetry-instrumentation-fastapi>=0.45b0
+opentelemetry-instrumentation-sqlalchemy>=0.45b0
