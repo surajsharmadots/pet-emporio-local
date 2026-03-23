@@ -44,7 +44,7 @@ async def create_session(
         tenant_id=tenant_id,
     )
 
-    return access_token, refresh_token, session
+    return access_token, refresh_token, session.id
 
 
 async def refresh_session(
@@ -76,7 +76,6 @@ async def refresh_session(
 
     if _hash_token(refresh_token) != session.refresh_token_hash:
         return None
-
     # Revoke old session and create a new one
     await repo.revoke(session_id)
     access_token, new_refresh_token, new_session = await create_session(

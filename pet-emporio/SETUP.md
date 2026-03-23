@@ -157,7 +157,41 @@ python3.12 -m pytest tests/ -v
 
 ---
 
-## Step 7 — (Optional) Start Kong API Gateway
+## Step 7 — Run user-service (dev)
+
+```bash
+# Make sure venv is active
+cd services/user-service
+pip install -r requirements-dev.txt
+```
+
+Copy and configure env:
+```bash
+cp .env.example .env
+# Edit .env — set JWT_PUBLIC_KEY to match auth-service's public.pem
+```
+
+Run migrations and start:
+```bash
+alembic upgrade head
+uvicorn app.main:app --host 0.0.0.0 --port 8012 --reload
+```
+
+Verify:
+```bash
+curl http://localhost:8012/health
+# → {"status":"ok","service":"user-service"}
+```
+
+Run tests (no infra needed — uses in-memory DB and fake Redis):
+```bash
+.venv/bin/pytest tests/ -v
+# Expected: 11 passed
+```
+
+---
+
+## Step 8 — (Optional) Start Kong API Gateway
 
 > Requires at least auth-service running first.
 
@@ -242,7 +276,7 @@ docker-compose down -v
 | 1      | pe-common library         | ✅ Done |
 | 2      | Docker Compose infra      | ✅ Done |
 | 3      | auth-service              | ✅ Done |
-| 4      | user-service              | ⬜      |
+| 4      | user-service              | ✅ Done |
 | 5      | Kong gateway config       | ⬜      |
 | 6      | catalog + content service | ⬜      |
 | 7      | notification-service      | ⬜      |

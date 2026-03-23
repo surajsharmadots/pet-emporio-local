@@ -1,6 +1,17 @@
 _format_version: "3.0"
 _transform: true
 
+# ─── Consumers ────────────────────────────────────────────────────────────────
+# One shared consumer represents "any valid pet-emporio token".
+# The jwt plugin validates the RS256 signature; our custom plugin extracts claims.
+
+consumers:
+  - username: pet-emporio-app
+    jwt_secrets:
+      - key: pet-emporio
+        algorithm: RS256
+        rsa_public_key: REPLACE_PUBLIC_KEY
+
 # ─── Services ────────────────────────────────────────────────────────────────
 
 services:
@@ -72,7 +83,7 @@ routes:
     service: auth-service
     paths:
       - ~/api/v1/auth/otp/.*
-      - /api/v1/auth/token/refresh
+      - ~/api/v1/auth/token/refresh/.*
     methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
     strip_path: false
     plugins:
@@ -94,7 +105,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 5
@@ -108,6 +120,11 @@ routes:
       - ~/api/v1/users/.*
       - ~/api/v1/tenants/.*
       - ~/api/v1/admin/users/.*
+      - ~/api/v1/admin/tenants/.*
+      - ~/api/v1/admin/kyc/.*
+      - ~/api/v1/admin/roles/.*
+      - ~/api/v1/admin/permissions/.*
+      - ~/api/v1/admin/audit-logs/.*
     methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
     strip_path: false
     plugins:
@@ -115,7 +132,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -153,7 +171,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -179,7 +198,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -211,7 +231,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -257,7 +278,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -283,7 +305,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -304,7 +327,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -345,7 +369,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100
@@ -366,7 +391,8 @@ routes:
         config:
           claims_to_verify: [exp]
           header_names: [authorization]
-          key_claim_name: kid
+          key_claim_name: iss
+      - name: jwt-claims-to-headers
       - name: rate-limiting
         config:
           minute: 100

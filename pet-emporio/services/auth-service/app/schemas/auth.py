@@ -21,6 +21,7 @@ class OtpVerifyRequest(BaseModel):
 class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
+    session_id: str
     token_type: str = "bearer"
     expires_in: int = 900  # 15 min in seconds
 
@@ -44,6 +45,16 @@ class SessionInfo(BaseModel):
 class GoogleAuthRequest(BaseModel):
     code: str
     redirect_uri: str
+
+
+class FacebookAuthRequest(BaseModel):
+    access_token: str
+    device_info: Optional[str] = None
+
+
+class AppleAuthRequest(BaseModel):
+    identity_token: str
+    device_info: Optional[str] = None
 
 
 class MfaSetupResponse(BaseModel):

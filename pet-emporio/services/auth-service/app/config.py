@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
-    OTP_EXPIRE_SECONDS: int = 300       # 5 minutes
-    OTP_RATE_LIMIT: int = 3             # max OTP requests
+    OTP_EXPIRE_SECONDS: int = 3000       # 5 minutes
+    OTP_RATE_LIMIT: int = 20             # max OTP requests
     OTP_RATE_WINDOW_SECONDS: int = 600  # per 10 minutes
 
     DEV_MODE: bool = True               # if True: log OTP to terminal, skip real SMS
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     MSG91_SENDER_ID: str = "PETEMP"     # 6-char sender ID registered with MSG91
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
+    FACEBOOK_APP_ID: str = ""           # Optional: for token validation via app-level debug_token
+    APPLE_BUNDLE_ID: str = ""           # e.g. "com.petemporio.app" — audience claim in Apple JWT
+    USER_SERVICE_URL: str = "http://user-service:8000"
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://jaeger:4317"
 

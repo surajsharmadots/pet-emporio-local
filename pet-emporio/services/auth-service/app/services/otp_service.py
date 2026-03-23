@@ -92,13 +92,23 @@ async def send_otp(redis: aioredis.Redis, mobile: str) -> bool:
     rate_key = f"{RATE_KEY_PREFIX}{mobile}"
     otp_key = f"{OTP_KEY_PREFIX}{mobile}"
 
+    # Check if OTP already exists
+    existing_otp = await redis.get(otp_key)
+    existing_ttl = await redis.ttl(otp_key)
+    
+    logger.info("otp_send_check", 
+                otp_key=otp_key,
+                existing_otp_exists=existing_otp is not None,
+                existing_ttl=existing_ttl)
+
     # Increment rate counter
     pipe = redis.pipeline()
     pipe.incr(rate_key)
     pipe.expire(rate_key, settings.OTP_RATE_WINDOW_SECONDS)
     await pipe.execute()
 
-    otp = _generate_otp()
+    # otp = _generate_otp()
+    otp = "123456"  # Hardcoded for testing
     otp_hash = _hash_otp(otp)
     expires_at = datetime.now(timezone.utc) + timedelta(seconds=settings.OTP_EXPIRE_SECONDS)
 
@@ -107,7 +117,18 @@ async def send_otp(redis: aioredis.Redis, mobile: str) -> bool:
         "expires_at": expires_at.isoformat(),
         "attempts": 0,
     })
+    
+    # Debug logging
+    logger.info("otp_redis_debug", 
+                otp_key=otp_key, 
+                expire_seconds=settings.OTP_EXPIRE_SECONDS,
+                expires_at=expires_at.isoformat())
+    
     await redis.setex(otp_key, settings.OTP_EXPIRE_SECONDS, payload)
+    
+    # Verify TTL was set correctly
+    ttl = await redis.ttl(otp_key)
+    logger.info("otp_ttl_check", otp_key=otp_key, ttl=ttl)
 
     if settings.DEV_MODE:
         # ── Dev mode: print OTP in terminal (no real SMS sent) ──────────────

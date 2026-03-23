@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import jwt
 from pe_common.exceptions import UnauthorizedError
@@ -11,11 +12,32 @@ logger = get_logger(__name__)
 
 
 def _private_key():
-    return settings.JWT_PRIVATE_KEY.replace("\\n", "\n")
+    # Settings (env var / monkeypatched in tests) take priority over file
+    key_content = settings.JWT_PRIVATE_KEY.replace("\\n", "\n")
+    if key_content.strip():
+        if (key_content.startswith("-----BEGIN PRIVATE KEY-----")
+                or key_content.startswith("-----BEGIN RSA PRIVATE KEY-----")):
+            return key_content
+        return f"-----BEGIN PRIVATE KEY-----\n{key_content}\n-----END PRIVATE KEY-----"
+    # Fallback: read from file (local dev convenience)
+    private_key_file = Path(__file__).parent.parent.parent / "private.pem"
+    if private_key_file.exists():
+        return private_key_file.read_text()
+    raise RuntimeError("JWT_PRIVATE_KEY not set and private.pem not found")
 
 
 def _public_key():
-    return settings.JWT_PUBLIC_KEY.replace("\\n", "\n")
+    # Settings (env var / monkeypatched in tests) take priority over file
+    key_content = settings.JWT_PUBLIC_KEY.replace("\\n", "\n")
+    if key_content.strip():
+        if key_content.startswith("-----BEGIN PUBLIC KEY-----"):
+            return key_content
+        return f"-----BEGIN PUBLIC KEY-----\n{key_content}\n-----END PUBLIC KEY-----"
+    # Fallback: read from file (local dev convenience)
+    public_key_file = Path(__file__).parent.parent.parent / "public.pem"
+    if public_key_file.exists():
+        return public_key_file.read_text()
+    raise RuntimeError("JWT_PUBLIC_KEY not set and public.pem not found")
 
 
 def create_access_token(
@@ -26,6 +48,7 @@ def create_access_token(
 ) -> str:
     now = datetime.now(timezone.utc)
     payload = {
+        "iss": "pet-emporio",
         "sub": user_id,
         "tenant_id": tenant_id,
         "roles": roles,
@@ -34,7 +57,14 @@ def create_access_token(
         "exp": now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         "jti": str(uuid.uuid4()),
     }
-    return jwt.encode(payload, _private_key(), algorithm=settings.JWT_ALGORITHM)
+    
+    try:
+        private_key = _private_key()
+        logger.info("jwt_key_debug", key_start=private_key[:50], key_length=len(private_key))
+        return jwt.encode(payload, private_key, algorithm=settings.JWT_ALGORITHM)
+    except Exception as e:
+        logger.error("jwt_encode_error", error=str(e), algorithm=settings.JWT_ALGORITHM)
+        raise
 
 
 def create_refresh_token() -> str:

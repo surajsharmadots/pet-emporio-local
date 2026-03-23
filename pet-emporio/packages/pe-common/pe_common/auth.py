@@ -3,6 +3,7 @@ import os
 from typing import Optional
 from fastapi import Depends, Header
 from .exceptions import UnauthorizedError
+from fastapi import Request
 
 PUBLIC_KEY = os.getenv("JWT_PUBLIC_KEY", "")
 
