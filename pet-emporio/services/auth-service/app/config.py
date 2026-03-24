@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
     OTP_EXPIRE_SECONDS: int = 3000       # 5 minutes
-    OTP_RATE_LIMIT: int = 20             # max OTP requests
+    OTP_RATE_LIMIT: int = 30             # max OTP requests
     OTP_RATE_WINDOW_SECONDS: int = 600  # per 10 minutes
 
     DEV_MODE: bool = True               # if True: log OTP to terminal, skip real SMS
@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     FACEBOOK_APP_ID: str = ""           # Optional: for token validation via app-level debug_token
     APPLE_BUNDLE_ID: str = ""           # e.g. "com.petemporio.app" — audience claim in Apple JWT
-    USER_SERVICE_URL: str = "http://user-service:8000"
+    USER_SERVICE_URL: str = "http://192.168.9.189:8012"
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://jaeger:4317"
 

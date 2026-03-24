@@ -52,3 +52,17 @@ class KycStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
+
+
+class OnboardingStatus(str, enum.Enum):
+    pending = "pending"
+    approved = "approved"
+    rejected = "rejected"
+
+
+class PortalType(str, enum.Enum):
+    doctor = "doctor"
+    lab = "lab"
+    seller = "seller"
+    pharmacy = "pharmacy"
+    groomer = "groomer"

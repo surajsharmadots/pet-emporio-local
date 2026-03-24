@@ -3,7 +3,7 @@ from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
-from ...enums import UserType, Gender, KycDocType, KycStatus
+from ...enums import UserType, Gender, KycDocType, KycStatus, OnboardingStatus, PortalType
 
 
 class UserUpdate(BaseModel):
@@ -115,8 +115,44 @@ class KycDocumentResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
-# Admin
+# Admin — user management
 class AdminUserUpdate(BaseModel):
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     user_type: Optional[UserType] = None
+
+
+# Provider onboarding
+class ProviderOnboardRequest(BaseModel):
+    """
+    Submitted by a provider on their portal registration page.
+    No authentication is required — this is a plain enquiry form.
+    The user account is only created after an admin approves the request.
+    """
+    portal_type: PortalType
+    mobile: str = Field(..., max_length=20)
+    full_name: str = Field(..., max_length=255, strip_whitespace=True)
+    email: EmailStr
+    business_name: Optional[str] = Field(None, max_length=255)  # seller, pharmacy only
+    location: Optional[str] = None                               # doctor, lab, groomer
+
+
+class OnboardingRequestResponse(BaseModel):
+    id: uuid.UUID
+    portal_type: PortalType
+    mobile: str
+    full_name: str
+    email: str
+    business_name: Optional[str] = None
+    location: Optional[str] = None
+    status: OnboardingStatus
+    rejection_reason: Optional[str] = None
+    user_id: Optional[uuid.UUID] = None
+    created_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class OnboardingRejectRequest(BaseModel):
+    reason: str = Field(..., min_length=5, max_length=500, strip_whitespace=True)

@@ -16,6 +16,8 @@ class OtpVerifyRequest(BaseModel):
     mobile: str
     otp: str = Field(..., min_length=6, max_length=6)
     device_info: Optional[str] = None
+    remember_me: bool = False
+    portal: Optional[str] = None  # "customer" (default) | "doctor" | "seller" | "lab" | "pharmacy" | "groomer" | "admin"
 
 
 class TokenPair(BaseModel):
@@ -36,25 +38,28 @@ class LogoutRequest(BaseModel):
 
 class SessionInfo(BaseModel):
     id: str
-    device_info: Optional[str]
-    ip_address: Optional[str]
+    device_info: Optional[str] = None
+    ip_address: Optional[str] = None
     created_at: datetime
     expires_at: datetime
 
 
 class GoogleAuthRequest(BaseModel):
-    code: str
-    redirect_uri: str
+    id_token: str                        # ID token from Google Sign-In SDK
+    device_info: Optional[str] = None
+    remember_me: bool = False
 
 
 class FacebookAuthRequest(BaseModel):
     access_token: str
     device_info: Optional[str] = None
+    remember_me: bool = False
 
 
 class AppleAuthRequest(BaseModel):
     identity_token: str
     device_info: Optional[str] = None
+    remember_me: bool = False
 
 
 class MfaSetupResponse(BaseModel):

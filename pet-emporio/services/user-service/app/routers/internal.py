@@ -13,13 +13,16 @@ from ..domains.users.service import UserService
 from ..domains.tenants.repository import TenantRepository
 from ..domains.tenants.schemas import TenantResponse
 from ..domains.rbac.service import RbacService
-from ..domains.rbac.schemas import PermissionCheckRequest
 
 router = APIRouter(prefix="/internal/v1", tags=["internal"])
 
 
 class GetOrCreateRequest(BaseModel):
-    mobile: str
+    mobile: str | None = None
+    email: str | None = None
+    provider: str | None = None          # "facebook" | "google" | "apple"
+    provider_user_id: str | None = None
+    full_name: str | None = ""
 
 
 class PermissionCheckBody(BaseModel):
@@ -27,7 +30,7 @@ class PermissionCheckBody(BaseModel):
     action: str
 
 
-# ─── Called by auth-service after OTP verification ───────────────────────────
+# ─── Called by auth-service after OTP verification or social login ────────────
 
 @router.post("/users/get-or-create")
 async def get_or_create_user(
@@ -37,7 +40,22 @@ async def get_or_create_user(
     svc = UserService(db)
     rbac_svc = RbacService(db)
 
-    user = await svc.get_or_create_by_mobile(body.mobile)
+    if body.mobile:
+        # OTP-based login: look up / create by mobile
+        user = await svc.get_or_create_by_mobile(body.mobile)
+    elif body.provider and body.provider_user_id:
+        # Social login: look up / create by email or provider_user_id
+        user = await svc.get_or_create_by_social(
+            email=body.email,
+            provider_user_id=body.provider_user_id,
+            full_name=body.full_name or "",
+        )
+    else:
+        raise AppException(
+            code="VALIDATION_ERROR",
+            message="Either mobile or provider+provider_user_id is required",
+            status_code=422,
+        )
 
     # Assign customer role on first creation
     role_names = await rbac_svc.get_user_role_names(user.id)
@@ -95,6 +113,34 @@ async def check_permission(
     allowed = await svc.check_permission(uuid.UUID(user_id), body.resource, body.action)
     return success_response({"allowed": allowed, "user_id": user_id,
                              "resource": body.resource, "action": body.action})
+
+
+# ─── Account status check (called by auth-service before issuing tokens) ──────
+
+@router.get("/users/status-by-mobile/{mobile}")
+async def get_user_status_by_mobile(
+    mobile: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Returns the account status for a given mobile number.
+    auth-service calls this after OTP verification to decide whether to
+    issue a session token or block login with an informative error.
+
+    Response fields:
+      exists    — whether a user record exists for this mobile
+      is_active — whether the account is enabled (False = pending/suspended)
+      user_type — the type of account (customer, doctor, seller, etc.)
+    """
+    repo = UserRepository(db)
+    user = await repo.get_by_mobile(mobile)
+    if not user:
+        return success_response({"exists": False, "is_active": False, "user_type": None})
+    return success_response({
+        "exists": True,
+        "is_active": user.is_active,
+        "user_type": user.user_type,
+    })
 
 
 # ─── Tenant lookup ────────────────────────────────────────────────────────────

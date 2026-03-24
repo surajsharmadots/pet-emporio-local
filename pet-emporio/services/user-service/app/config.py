@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     MINIO_BUCKET_USERS: str = "pe-users"
     MINIO_SECURE: bool = False
 
+    AUTH_SERVICE_URL: str = "http://auth-service:8000"
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://jaeger:4317"
 
     model_config = {"env_file": ".env", "extra": "ignore"}

@@ -56,6 +56,15 @@ class RbacService:
         if role:
             await self.user_role_repo.assign_role(user_id, role.id, None, None)
 
+    async def assign_role_by_name(self, user_id: uuid.UUID, role_name: str):
+        """
+        Assigns a system role to a user without requiring a tenant or granting admin.
+        Used internally during provider onboarding approval.
+        """
+        role = await self.role_repo.get_by_name(role_name)
+        if role:
+            await self.user_role_repo.assign_role(user_id, role.id, None, None)
+
     async def get_user_role_names(self, user_id: uuid.UUID) -> list[str]:
         return await self.user_role_repo.get_role_names(user_id)
 

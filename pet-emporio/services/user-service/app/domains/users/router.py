@@ -11,6 +11,7 @@ from .schemas import (
     UserUpdate, UserResponse, AddressCreate, AddressUpdate,
     AddressResponse, KycUploadRequest, KycDocumentResponse, AdminUserUpdate,
     CompleteRegistrationRequest, WalkInCustomerCreate, WalkInCustomerResponse,
+    ProviderOnboardRequest, OnboardingRequestResponse, OnboardingRejectRequest,
 )
 from .service import UserService
 from ..rbac.service import RbacService
@@ -40,7 +41,6 @@ async def update_my_profile(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
     svc = UserService(db)
     user = await svc.update_profile(uuid.UUID(current_user["user_id"]), body)
     return success_response(UserResponse.model_validate(user).model_dump())
@@ -54,7 +54,6 @@ async def complete_registration(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
     svc = UserService(db)
     user = await svc.complete_registration(uuid.UUID(current_user["user_id"]), body)
     await db.commit()
@@ -90,7 +89,6 @@ async def list_walk_in_customers(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    from pe_common.schemas import paginated_response
     provider_tenant_id = current_user.get("tenant_id")
     if not provider_tenant_id:
         raise AppException(code="FORBIDDEN", message="Provider tenant context required", status_code=403)
@@ -116,7 +114,6 @@ async def upload_avatar(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
     file_url = body.get("file_url")
     if not file_url:
         raise AppException(code="VALIDATION_ERROR", message="file_url is required", status_code=422)
@@ -136,7 +133,7 @@ async def list_my_addresses(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     svc = UserService(db)
     addresses = await svc.list_addresses(uuid.UUID(current_user["user_id"]))
     return success_response([AddressResponse.model_validate(a).model_dump() for a in addresses])
@@ -148,7 +145,7 @@ async def add_address(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     svc = UserService(db)
     address = await svc.add_address(uuid.UUID(current_user["user_id"]), body)
     await db.commit()
@@ -162,7 +159,7 @@ async def update_address(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     svc = UserService(db)
     address = await svc.update_address(
         uuid.UUID(current_user["user_id"]),
@@ -179,7 +176,7 @@ async def delete_address(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     svc = UserService(db)
     await svc.delete_address(uuid.UUID(current_user["user_id"]), uuid.UUID(address_id))
     await db.commit()
@@ -194,7 +191,6 @@ async def upload_kyc(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
     svc = UserService(db)
     doc = await svc.upload_kyc(uuid.UUID(current_user["user_id"]), body.doc_type, body.file_url)
     await db.commit()
@@ -206,7 +202,7 @@ async def kyc_status(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     svc = UserService(db)
     docs = await svc.get_kyc_status(uuid.UUID(current_user["user_id"]))
     return success_response([KycDocumentResponse.model_validate(d).model_dump() for d in docs])
@@ -238,7 +234,7 @@ async def admin_get_user(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     _require_admin(current_user)
     svc = UserService(db)
     user = await svc.get_profile(uuid.UUID(user_id))
@@ -252,7 +248,7 @@ async def admin_update_user(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     _require_admin(current_user)
     svc = UserService(db)
     user = await svc.admin_update_user(
@@ -281,7 +277,7 @@ async def admin_approve_kyc(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     _require_admin(current_user)
     svc = UserService(db)
     doc = await svc.approve_kyc(uuid.UUID(kyc_id), uuid.UUID(current_user["user_id"]))
@@ -296,7 +292,7 @@ async def admin_reject_kyc(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
-    import uuid
+    
     _require_admin(current_user)
     svc = UserService(db)
     doc = await svc.reject_kyc(
@@ -333,6 +329,108 @@ async def admin_audit_logs(
         }
         for log in logs
     ])
+
+
+# ─── Provider Onboarding ──────────────────────────────────────────────────────
+
+@router.post("/api/v1/provider/onboard", status_code=201)
+async def provider_onboard(
+    body: ProviderOnboardRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Public endpoint — no auth token or OTP required.
+    Called from the registration page of any provider portal
+    (Doctor, Lab, Seller, Pharmacy, Groomer).
+
+    This is a simple enquiry form. The admin reviews the submission
+    and approves or rejects it. The user account is created only
+    after approval, at which point the provider can log in with
+    mobile + OTP for the first time.
+    """
+    svc = UserService(db)
+    req = await svc.submit_onboarding(body)
+    await db.commit()
+    return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
+
+
+# ─── Admin: Onboarding Requests ───────────────────────────────────────────────
+
+@router.get("/api/v1/admin/onboarding-requests")
+async def admin_list_onboarding_requests(
+    status: str | None = None,
+    page: int = 1,
+    per_page: int = 20,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Lists provider onboarding requests. Filterable by status: pending, approved, rejected."""
+    _require_admin(current_user)
+    svc = UserService(db)
+    offset = (page - 1) * per_page
+    requests = await svc.list_onboarding_requests(status=status, limit=per_page, offset=offset)
+    total = await svc.count_onboarding_requests(status=status)
+    return paginated_response(
+        [OnboardingRequestResponse.model_validate(r).model_dump() for r in requests],
+        page=page,
+        page_size=per_page,
+        total=total,
+    )
+
+
+@router.get("/api/v1/admin/onboarding-requests/{request_id}")
+async def admin_get_onboarding_request(
+    request_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    _require_admin(current_user)
+    svc = UserService(db)
+    req = await svc.onboarding_repo.get_by_id(request_id)
+    if not req:
+        raise AppException(code="NOT_FOUND", message="Onboarding request not found.", status_code=404)
+    return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
+
+
+@router.patch("/api/v1/admin/onboarding-requests/{request_id}/approve")
+async def admin_approve_onboarding(
+    request_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Approves a provider onboarding request.
+    Creates the user account, assigns the provider role, and publishes
+    a provider.onboarding_approved event (notification-service listens to send SMS).
+    """
+    _require_admin(current_user)
+    svc = UserService(db)
+    req = await svc.approve_onboarding(uuid.UUID(request_id), uuid.UUID(current_user["user_id"]))
+    await db.commit()
+    return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
+
+
+@router.patch("/api/v1/admin/onboarding-requests/{request_id}/reject")
+async def admin_reject_onboarding(
+    request_id: str,
+    body: OnboardingRejectRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    Rejects a provider onboarding request with a mandatory reason.
+    Publishes a provider.onboarding_rejected event so the notification-service
+    can send the provider an SMS explaining the rejection.
+    """
+    _require_admin(current_user)
+    svc = UserService(db)
+    req = await svc.reject_onboarding(
+        uuid.UUID(request_id),
+        uuid.UUID(current_user["user_id"]),
+        body.reason,
+    )
+    await db.commit()
+    return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

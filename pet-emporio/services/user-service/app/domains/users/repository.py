@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 from sqlalchemy import select, update, func
 
-from .models import User, UserAddress, KycDocument
+from .models import User, UserAddress, KycDocument, OnboardingRequest
 
 
 class UserRepository:
@@ -26,6 +26,14 @@ class UserRepository:
             select(User).where(User.email == email, User.deleted_at.is_(None))
         )
         return result.scalar_one_or_none()
+
+    async def create_social(self, email: str | None, full_name: str = "") -> User:
+        """Create a user for social login — no mobile required."""
+        user = User(mobile=None, user_type="customer", email=email, full_name=full_name)
+        self.db.add(user)
+        await self.db.flush()
+        await self.db.refresh(user)
+        return user
 
     async def create(self, mobile: str, user_type: str = "customer", **kwargs) -> User:
         user = User(mobile=mobile, user_type=user_type, **kwargs)
@@ -157,3 +165,89 @@ class KycRepository:
         await self.db.flush()
         await self.db.refresh(kyc)
         return kyc
+
+
+class OnboardingRepository:
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def create(self, data: dict) -> OnboardingRequest:
+        req = OnboardingRequest(**data)
+        self.db.add(req)
+        await self.db.flush()
+        await self.db.refresh(req)
+        return req
+
+    async def get_by_id(self, request_id: str) -> OnboardingRequest | None:
+        result = await self.db.execute(
+            select(OnboardingRequest).where(OnboardingRequest.id == request_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_mobile(self, mobile: str) -> OnboardingRequest | None:
+        """Returns the most recent pending or approved request for a mobile number."""
+        result = await self.db.execute(
+            select(OnboardingRequest)
+            .where(
+                OnboardingRequest.mobile == mobile,
+                OnboardingRequest.status.in_(["pending", "approved"]),
+            )
+            .order_by(OnboardingRequest.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_by_status(
+        self, status: str, limit: int = 50, offset: int = 0
+    ) -> list[OnboardingRequest]:
+        result = await self.db.execute(
+            select(OnboardingRequest)
+            .where(OnboardingRequest.status == status)
+            .order_by(OnboardingRequest.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all())
+
+    async def count_by_status(self, status: str) -> int:
+        result = await self.db.execute(
+            select(func.count())
+            .select_from(OnboardingRequest)
+            .where(OnboardingRequest.status == status)
+        )
+        return result.scalar_one()
+
+    async def list_all(self, limit: int = 50, offset: int = 0) -> list[OnboardingRequest]:
+        result = await self.db.execute(
+            select(OnboardingRequest)
+            .order_by(OnboardingRequest.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list(result.scalars().all())
+
+    async def count_all(self) -> int:
+        result = await self.db.execute(select(func.count()).select_from(OnboardingRequest))
+        return result.scalar_one()
+
+    async def approve(
+        self, req: OnboardingRequest, reviewer_id: str, user_id: str
+    ) -> OnboardingRequest:
+        req.status = "approved"
+        req.reviewed_by = reviewer_id
+        req.reviewed_at = datetime.now(timezone.utc)
+        req.user_id = user_id
+        await self.db.flush()
+        await self.db.refresh(req)
+        return req
+
+    async def reject(
+        self, req: OnboardingRequest, reviewer_id: str, reason: str
+    ) -> OnboardingRequest:
+        req.status = "rejected"
+        req.reviewed_by = reviewer_id
+        req.reviewed_at = datetime.now(timezone.utc)
+        req.rejection_reason = reason
+        await self.db.flush()
+        await self.db.refresh(req)
+        return req

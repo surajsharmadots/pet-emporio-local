@@ -19,14 +19,20 @@ async def create_session(
     tenant_id: str = None,
     device_info: str = None,
     ip_address: str = None,
+    remember_me: bool = False,
 ) -> tuple[str, str, Session]:
-    """Creates session, returns (access_token, refresh_token, session)."""
+    """Creates session, returns (access_token, refresh_token, session).
+
+    remember_me=True extends refresh token TTL from 30 days to 90 days
+    (covers Doctor, Lab, Seller, Pharmacy, Groomer 'Save/remember login').
+    """
     repo = SessionRepository(db)
 
     # Placeholder roles — in production these come from user-service
     roles = ["customer"]
     refresh_token = jwt_service.create_refresh_token()
-    expires_at = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    ttl_days = settings.REFRESH_TOKEN_EXPIRE_DAYS * 3 if remember_me else settings.REFRESH_TOKEN_EXPIRE_DAYS
+    expires_at = datetime.now(timezone.utc) + timedelta(days=ttl_days)
 
     session = await repo.create(
         user_id=user_id,

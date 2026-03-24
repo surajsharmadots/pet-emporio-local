@@ -5,11 +5,23 @@ from pe_common.exceptions import AppException
 from pe_common.logging import get_logger
 from pe_common.events import EventPublisher
 
-from .repository import UserRepository, AddressRepository, KycRepository
-from .schemas import UserUpdate, AddressCreate, AddressUpdate, AdminUserUpdate, CompleteRegistrationRequest, WalkInCustomerCreate
+from .repository import UserRepository, AddressRepository, KycRepository, OnboardingRepository
+from .schemas import (
+    UserUpdate, AddressCreate, AddressUpdate, AdminUserUpdate,
+    CompleteRegistrationRequest, WalkInCustomerCreate, ProviderOnboardRequest,
+)
 from ..audit.repository import AuditRepository
 
 logger = get_logger(__name__)
+
+
+_PORTAL_TO_USER_TYPE = {
+    "doctor": "doctor",
+    "lab": "lab_technician",
+    "seller": "seller",
+    "pharmacy": "pharmacist",
+    "groomer": "groomer",
+}
 
 
 class UserService:
@@ -19,6 +31,7 @@ class UserService:
         self.address_repo = AddressRepository(db)
         self.kyc_repo = KycRepository(db)
         self.audit_repo = AuditRepository(db)
+        self.onboarding_repo = OnboardingRepository(db)
 
     async def get_or_create_by_mobile(self, mobile: str, user_type: str = "customer"):
         user = await self.repo.get_by_mobile(mobile)
@@ -30,6 +43,38 @@ class UserService:
             await EventPublisher.publish(
                 event_type="user.registered",
                 payload={"user_id": str(user.id), "mobile": mobile, "user_type": user_type},
+                service="user-service",
+            )
+        except Exception as e:
+            logger.warning("event_publish_failed", error=str(e))
+        return user
+
+    async def get_or_create_by_social(
+        self,
+        email: str | None,
+        provider_user_id: str,
+        full_name: str = "",
+    ):
+        """
+        Used by auth-service for social logins (Google, Facebook, Apple).
+        Lookup order: email → create new (mobile=NULL).
+        """
+        # 1. Try lookup by email
+        if email:
+            user = await self.repo.get_by_email(email)
+            if user:
+                return user
+
+        # 2. Create new social user (no mobile)
+        user = await self.repo.create_social(
+            email=email,
+            full_name=full_name,
+        )
+        logger.info("social_user_created", user_id=str(user.id), email=email)
+        try:
+            await EventPublisher.publish(
+                event_type="user.registered",
+                payload={"user_id": str(user.id), "email": email, "user_type": "customer"},
                 service="user-service",
             )
         except Exception as e:
@@ -180,3 +225,159 @@ class UserService:
             new_values={"rejection_reason": reason},
         )
         return kyc
+
+    # ── Provider onboarding ────────────────────────────────────────────────────
+
+    async def submit_onboarding(self, data: ProviderOnboardRequest):
+        """
+        Creates an onboarding request with status=pending.
+        A user account is NOT created here — that only happens on admin approval.
+        Raises CONFLICT if the mobile number already has a pending or approved request.
+        """
+        existing = await self.onboarding_repo.get_by_mobile(data.mobile)
+        if existing:
+            if existing.status == "approved":
+                raise AppException(
+                    code="ALREADY_REGISTERED",
+                    message="An account for this mobile number already exists. Please log in.",
+                    status_code=409,
+                )
+            raise AppException(
+                code="REQUEST_ALREADY_SUBMITTED",
+                message="An onboarding request for this mobile number is already pending review.",
+                status_code=409,
+            )
+
+        req = await self.onboarding_repo.create({
+            "portal_type": data.portal_type.value,
+            "mobile": data.mobile,
+            "full_name": data.full_name,
+            "email": str(data.email),
+            "business_name": data.business_name,
+            "location": data.location,
+        })
+
+        try:
+            await EventPublisher.publish(
+                event_type="provider.onboarding_submitted",
+                payload={
+                    "request_id": str(req.id),
+                    "portal_type": data.portal_type.value,
+                    "mobile": data.mobile,
+                    "email": str(data.email),
+                },
+                service="user-service",
+            )
+        except Exception as e:
+            logger.warning("event_publish_failed", error=str(e))
+
+        return req
+
+    async def approve_onboarding(self, request_id: uuid.UUID, reviewer_id: uuid.UUID):
+        """
+        Approves an onboarding request.
+        Creates the user account (is_active=False so admin must explicitly activate,
+        OR set is_active=True directly — provider can log in immediately after approval).
+        """
+        from ..rbac.service import RbacService
+
+        req = await self.onboarding_repo.get_by_id(str(request_id))
+        if not req:
+            raise AppException(code="NOT_FOUND", message="Onboarding request not found.", status_code=404)
+        if req.status != "pending":
+            raise AppException(
+                code="INVALID_STATE",
+                message=f"Request is already {req.status}.",
+                status_code=409,
+            )
+
+        user_type = _PORTAL_TO_USER_TYPE.get(req.portal_type, "customer")
+
+        # Create the user account — active immediately so they can log in
+        user = await self.repo.create(
+            mobile=req.mobile,
+            user_type=user_type,
+            full_name=req.full_name,
+            email=req.email,
+            is_active=True,
+            is_verified=True,
+        )
+
+        # Assign the matching role via RBAC
+        rbac_svc = RbacService(self.db)
+        await rbac_svc.assign_role_by_name(user.id, user_type)
+
+        await self.onboarding_repo.approve(req, str(reviewer_id), str(user.id))
+
+        await self.audit_repo.log(
+            user_id=reviewer_id,
+            action="admin.onboarding.approve",
+            resource_type="onboarding_request",
+            resource_id=request_id,
+        )
+
+        try:
+            await EventPublisher.publish(
+                event_type="provider.onboarding_approved",
+                payload={
+                    "request_id": str(req.id),
+                    "user_id": str(user.id),
+                    "mobile": req.mobile,
+                    "portal_type": req.portal_type,
+                },
+                service="user-service",
+            )
+        except Exception as e:
+            logger.warning("event_publish_failed", error=str(e))
+
+        return req
+
+    async def reject_onboarding(
+        self, request_id: uuid.UUID, reviewer_id: uuid.UUID, reason: str
+    ):
+        req = await self.onboarding_repo.get_by_id(str(request_id))
+        if not req:
+            raise AppException(code="NOT_FOUND", message="Onboarding request not found.", status_code=404)
+        if req.status != "pending":
+            raise AppException(
+                code="INVALID_STATE",
+                message=f"Request is already {req.status}.",
+                status_code=409,
+            )
+
+        await self.onboarding_repo.reject(req, str(reviewer_id), reason)
+
+        await self.audit_repo.log(
+            user_id=reviewer_id,
+            action="admin.onboarding.reject",
+            resource_type="onboarding_request",
+            resource_id=request_id,
+            new_values={"rejection_reason": reason},
+        )
+
+        try:
+            await EventPublisher.publish(
+                event_type="provider.onboarding_rejected",
+                payload={
+                    "request_id": str(req.id),
+                    "mobile": req.mobile,
+                    "reason": reason,
+                },
+                service="user-service",
+            )
+        except Exception as e:
+            logger.warning("event_publish_failed", error=str(e))
+
+        return req
+
+    async def list_onboarding_requests(
+        self, status: str | None = None, limit: int = 50, offset: int = 0
+    ):
+        if status:
+            return await self.onboarding_repo.list_by_status(status, limit=limit, offset=offset)
+        return await self.onboarding_repo.list_all(limit=limit, offset=offset)
+
+    async def count_onboarding_requests(self, status: str | None = None) -> int:
+        if status:
+            return await self.onboarding_repo.count_by_status(status)
+        return await self.onboarding_repo.count_all()

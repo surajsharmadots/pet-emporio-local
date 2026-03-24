@@ -4,7 +4,7 @@ from sqlalchemy import Column, String, Boolean, Text, Date, ForeignKey, Numeric,
 from sqlalchemy.orm import relationship
 
 from ...database import Base
-from ...enums import UserType, Gender, KycDocType, KycStatus
+from ...enums import UserType, Gender, KycDocType, KycStatus, OnboardingStatus, PortalType
 
 
 def _uuid():
@@ -17,7 +17,7 @@ class User(Base):
     id = Column(String(36), primary_key=True, default=_uuid)
     auth_user_id = Column(String(36), unique=True, nullable=True)
     email = Column(String(255), unique=True, nullable=True)
-    mobile = Column(String(20), unique=True, nullable=False)
+    mobile = Column(String(20), unique=True, nullable=True)
     full_name = Column(String(255), nullable=False, default="")
     avatar_url = Column(Text, nullable=True)
     date_of_birth = Column(Date, nullable=True)
@@ -81,3 +81,31 @@ class KycDocument(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="kyc_documents")
+
+
+class OnboardingRequest(Base):
+    """
+    Stores provider self-registration requests that are awaiting admin review.
+    A user account is NOT created until the admin approves the request.
+    On approval, the service layer creates the user, tenant, and assigns the role.
+    """
+    __tablename__ = "onboarding_requests"
+
+    id = Column(String(36), primary_key=True, default=_uuid)
+    portal_type = Column(SAEnum(PortalType, native_enum=False, length=30), nullable=False)
+    mobile = Column(String(20), nullable=False)
+    full_name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=False)
+    business_name = Column(String(255), nullable=True)   # seller and pharmacy only
+    location = Column(Text, nullable=True)               # doctor, lab, groomer
+    status = Column(
+        SAEnum(OnboardingStatus, native_enum=False, length=20),
+        nullable=False,
+        default=OnboardingStatus.pending,
+    )
+    rejection_reason = Column(Text, nullable=True)
+    reviewed_by = Column(String(36), nullable=True)      # admin user_id
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)
+    user_id = Column(String(36), nullable=True)          # set after approval
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
