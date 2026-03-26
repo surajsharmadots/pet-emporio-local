@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-import uuid
 
 from pe_common.schemas import success_response, paginated_response
 from pe_common.auth import get_current_user
@@ -18,9 +17,6 @@ from ..rbac.service import RbacService
 
 router = APIRouter(tags=["users"])
 
-
-# ─── My Profile ───────────────────────────────────────────────────────────────
-
 @router.get("/api/v1/users/me")
 async def get_my_profile(
     db: AsyncSession = Depends(get_db),
@@ -28,12 +24,11 @@ async def get_my_profile(
 ):
     svc = UserService(db)
     rbac_svc = RbacService(db)
-    user = await svc.get_profile(uuid.UUID(current_user["user_id"]))
+    user = await svc.get_profile(current_user["user_id"])
     roles = await rbac_svc.get_user_role_names(user.id)
     data = UserResponse.model_validate(user).model_dump()
     data["roles"] = roles
     return success_response(data)
-
 
 @router.patch("/api/v1/users/me")
 async def update_my_profile(
@@ -41,12 +36,17 @@ async def update_my_profile(
     db: AsyncSession = Depends(get_db),
     current_user: dict = Depends(get_current_user),
 ):
+    print("Updating profile for user_id:", current_user["user_id"])
+
     svc = UserService(db)
-    user = await svc.update_profile(uuid.UUID(current_user["user_id"]), body)
-    return success_response(UserResponse.model_validate(user).model_dump())
 
+    user = await svc.update_profile(current_user["user_id"], body)
 
-# ─── Complete Registration ────────────────────────────────────────────────────
+    print("User:", user.email)
+
+    return success_response(
+        UserResponse.model_validate(user).model_dump()
+    )
 
 @router.post("/api/v1/users/me/complete-registration")
 async def complete_registration(
@@ -55,12 +55,9 @@ async def complete_registration(
     current_user: dict = Depends(get_current_user),
 ):
     svc = UserService(db)
-    user = await svc.complete_registration(uuid.UUID(current_user["user_id"]), body)
+    user = await svc.complete_registration(current_user["user_id"], body)
     await db.commit()
     return success_response(UserResponse.model_validate(user).model_dump())
-
-
-# ─── Provider: Walk-In Customers ──────────────────────────────────────────────
 
 @router.post("/api/v1/provider/walk-in-customers")
 async def create_walk_in_customer(
@@ -80,7 +77,6 @@ async def create_walk_in_customer(
         last_name=user.last_name,
         mobile=user.mobile,
     ).model_dump())
-
 
 @router.get("/api/v1/provider/walk-in-customers")
 async def list_walk_in_customers(
@@ -105,9 +101,6 @@ async def list_walk_in_customers(
         for u in users
     ])
 
-
-# ─── Avatar ───────────────────────────────────────────────────────────────────
-
 @router.post("/api/v1/users/me/avatar")
 async def upload_avatar(
     body: dict,
@@ -118,15 +111,12 @@ async def upload_avatar(
     if not file_url:
         raise AppException(code="VALIDATION_ERROR", message="file_url is required", status_code=422)
     svc = UserService(db)
-    user = await svc.repo.get_by_id(uuid.UUID(current_user["user_id"]))
+    user = await svc.repo.get_by_id(current_user["user_id"])
     if not user:
         raise AppException(code="NOT_FOUND", message="User not found", status_code=404)
     user = await svc.repo.update(user, avatar_url=file_url)
     await db.commit()
     return success_response({"avatar_url": user.avatar_url})
-
-
-# ─── Addresses ────────────────────────────────────────────────────────────────
 
 @router.get("/api/v1/users/me/addresses")
 async def list_my_addresses(
@@ -135,9 +125,8 @@ async def list_my_addresses(
 ):
     
     svc = UserService(db)
-    addresses = await svc.list_addresses(uuid.UUID(current_user["user_id"]))
+    addresses = await svc.list_addresses(current_user["user_id"])
     return success_response([AddressResponse.model_validate(a).model_dump() for a in addresses])
-
 
 @router.post("/api/v1/users/me/addresses")
 async def add_address(
@@ -147,10 +136,9 @@ async def add_address(
 ):
     
     svc = UserService(db)
-    address = await svc.add_address(uuid.UUID(current_user["user_id"]), body)
+    address = await svc.add_address(current_user["user_id"], body)
     await db.commit()
     return success_response(AddressResponse.model_validate(address).model_dump())
-
 
 @router.patch("/api/v1/users/me/addresses/{address_id}")
 async def update_address(
@@ -162,13 +150,12 @@ async def update_address(
     
     svc = UserService(db)
     address = await svc.update_address(
-        uuid.UUID(current_user["user_id"]),
-        uuid.UUID(address_id),
+        current_user["user_id"],
+        address_id,
         body,
     )
     await db.commit()
     return success_response(AddressResponse.model_validate(address).model_dump())
-
 
 @router.delete("/api/v1/users/me/addresses/{address_id}")
 async def delete_address(
@@ -178,12 +165,9 @@ async def delete_address(
 ):
     
     svc = UserService(db)
-    await svc.delete_address(uuid.UUID(current_user["user_id"]), uuid.UUID(address_id))
+    await svc.delete_address(current_user["user_id"],address_id)
     await db.commit()
     return success_response({"message": "Address deleted"})
-
-
-# ─── KYC ──────────────────────────────────────────────────────────────────────
 
 @router.post("/api/v1/users/me/kyc/upload")
 async def upload_kyc(
@@ -192,10 +176,9 @@ async def upload_kyc(
     current_user: dict = Depends(get_current_user),
 ):
     svc = UserService(db)
-    doc = await svc.upload_kyc(uuid.UUID(current_user["user_id"]), body.doc_type, body.file_url)
+    doc = await svc.upload_kyc(current_user["user_id"], body.doc_type, body.file_url)
     await db.commit()
     return success_response(KycDocumentResponse.model_validate(doc).model_dump())
-
 
 @router.get("/api/v1/users/me/kyc/status")
 async def kyc_status(
@@ -204,11 +187,8 @@ async def kyc_status(
 ):
     
     svc = UserService(db)
-    docs = await svc.get_kyc_status(uuid.UUID(current_user["user_id"]))
+    docs = await svc.get_kyc_status(current_user["user_id"])
     return success_response([KycDocumentResponse.model_validate(d).model_dump() for d in docs])
-
-
-# ─── Admin: Users ─────────────────────────────────────────────────────────────
 
 @router.get("/api/v1/admin/users")
 async def admin_list_users(
@@ -227,7 +207,6 @@ async def admin_list_users(
         page=page, page_size=per_page, total=total,
     )
 
-
 @router.get("/api/v1/admin/users/{user_id}")
 async def admin_get_user(
     user_id: str,
@@ -237,9 +216,8 @@ async def admin_get_user(
     
     _require_admin(current_user)
     svc = UserService(db)
-    user = await svc.get_profile(uuid.UUID(user_id))
+    user = await svc.get_profile(user_id)
     return success_response(UserResponse.model_validate(user).model_dump())
-
 
 @router.patch("/api/v1/admin/users/{user_id}")
 async def admin_update_user(
@@ -252,13 +230,10 @@ async def admin_update_user(
     _require_admin(current_user)
     svc = UserService(db)
     user = await svc.admin_update_user(
-        uuid.UUID(user_id), body, uuid.UUID(current_user["user_id"])
+        user_id, body, current_user["user_id"]
     )
     await db.commit()
     return success_response(UserResponse.model_validate(user).model_dump())
-
-
-# ─── Admin: KYC ───────────────────────────────────────────────────────────────
 
 @router.get("/api/v1/admin/kyc")
 async def admin_list_kyc(
@@ -270,7 +245,6 @@ async def admin_list_kyc(
     docs = await svc.kyc_repo.list_pending()
     return success_response([KycDocumentResponse.model_validate(d).model_dump() for d in docs])
 
-
 @router.patch("/api/v1/admin/kyc/{kyc_id}/approve")
 async def admin_approve_kyc(
     kyc_id: str,
@@ -280,10 +254,9 @@ async def admin_approve_kyc(
     
     _require_admin(current_user)
     svc = UserService(db)
-    doc = await svc.approve_kyc(uuid.UUID(kyc_id), uuid.UUID(current_user["user_id"]))
+    doc = await svc.approve_kyc(kyc_id, current_user["user_id"])
     await db.commit()
     return success_response(KycDocumentResponse.model_validate(doc).model_dump())
-
 
 @router.patch("/api/v1/admin/kyc/{kyc_id}/reject")
 async def admin_reject_kyc(
@@ -296,15 +269,12 @@ async def admin_reject_kyc(
     _require_admin(current_user)
     svc = UserService(db)
     doc = await svc.reject_kyc(
-        uuid.UUID(kyc_id),
-        uuid.UUID(current_user["user_id"]),
+        kyc_id,
+        current_user["user_id"],
         body.get("reason", ""),
     )
     await db.commit()
     return success_response(KycDocumentResponse.model_validate(doc).model_dump())
-
-
-# ─── Admin: Audit logs ────────────────────────────────────────────────────────
 
 @router.get("/api/v1/admin/audit-logs")
 async def admin_audit_logs(
@@ -330,9 +300,6 @@ async def admin_audit_logs(
         for log in logs
     ])
 
-
-# ─── Provider Onboarding ──────────────────────────────────────────────────────
-
 @router.post("/api/v1/provider/onboard", status_code=201)
 async def provider_onboard(
     body: ProviderOnboardRequest,
@@ -352,9 +319,6 @@ async def provider_onboard(
     req = await svc.submit_onboarding(body)
     await db.commit()
     return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
-
-
-# ─── Admin: Onboarding Requests ───────────────────────────────────────────────
 
 @router.get("/api/v1/admin/onboarding-requests")
 async def admin_list_onboarding_requests(
@@ -377,7 +341,6 @@ async def admin_list_onboarding_requests(
         total=total,
     )
 
-
 @router.get("/api/v1/admin/onboarding-requests/{request_id}")
 async def admin_get_onboarding_request(
     request_id: str,
@@ -390,7 +353,6 @@ async def admin_get_onboarding_request(
     if not req:
         raise AppException(code="NOT_FOUND", message="Onboarding request not found.", status_code=404)
     return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
-
 
 @router.patch("/api/v1/admin/onboarding-requests/{request_id}/approve")
 async def admin_approve_onboarding(
@@ -405,10 +367,9 @@ async def admin_approve_onboarding(
     """
     _require_admin(current_user)
     svc = UserService(db)
-    req = await svc.approve_onboarding(uuid.UUID(request_id), uuid.UUID(current_user["user_id"]))
+    req = await svc.approve_onboarding(request_id, current_user["user_id"])
     await db.commit()
     return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
-
 
 @router.patch("/api/v1/admin/onboarding-requests/{request_id}/reject")
 async def admin_reject_onboarding(
@@ -425,15 +386,12 @@ async def admin_reject_onboarding(
     _require_admin(current_user)
     svc = UserService(db)
     req = await svc.reject_onboarding(
-        uuid.UUID(request_id),
-        uuid.UUID(current_user["user_id"]),
+        request_id,
+        current_user["user_id"],
         body.reason,
     )
     await db.commit()
     return success_response(OnboardingRequestResponse.model_validate(req).model_dump())
-
-
-# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _require_admin(current_user: dict):
     roles = current_user.get("roles", [])

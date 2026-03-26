@@ -10,9 +10,6 @@ from app.main import app
 from app.database import Base, get_db
 from app.redis_client import get_redis
 
-
-# ── Generate RSA keys for tests ──────────────────────────────────────────────
-
 def _gen_rsa_keys():
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     private_pem = private_key.private_bytes(
@@ -26,11 +23,7 @@ def _gen_rsa_keys():
     ).decode()
     return private_pem, public_pem
 
-
 TEST_PRIVATE_KEY, TEST_PUBLIC_KEY = _gen_rsa_keys()
-
-
-# ── Patch settings before importing services ─────────────────────────────────
 
 @pytest.fixture(autouse=True)
 def patch_settings(monkeypatch):
@@ -43,9 +36,6 @@ def patch_settings(monkeypatch):
     # pe_common.auth reads PUBLIC_KEY at module import time — patch it too
     import pe_common.auth as pe_auth
     monkeypatch.setattr(pe_auth, "PUBLIC_KEY", TEST_PUBLIC_KEY)
-
-
-# ── In-memory SQLite DB ───────────────────────────────────────────────────────
 
 @pytest_asyncio.fixture
 async def db_session():
@@ -62,17 +52,11 @@ async def db_session():
 
     await engine.dispose()
 
-
-# ── Fake Redis ────────────────────────────────────────────────────────────────
-
 @pytest_asyncio.fixture
 async def fake_redis():
     redis = FakeRedis(decode_responses=True)
     yield redis
     await redis.aclose()
-
-
-# ── FastAPI test client with overrides ───────────────────────────────────────
 
 @pytest_asyncio.fixture
 async def client(db_session, fake_redis):

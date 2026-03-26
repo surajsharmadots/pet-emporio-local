@@ -1,24 +1,4 @@
-"""
-Device binding service.
-
-What "device binding" means here
-──────────────────────────────────
-A device is registered the first time it logs in.  On subsequent logins from
-the SAME device the device_id is validated against the stored registration.
-The device_id is embedded in the JWT (via Keycloak session note mapper) so
-downstream services can enforce per-device policies (e.g. block a stolen phone).
-
-Flow
-────
-1. Client sends `device_id` (UUID generated and persisted on the device) +
-   `device_fingerprint` (OS + model hash) with every auth request.
-2. `register_or_validate_device()` either creates a new DeviceRegistration
-   row or checks that the fingerprint still matches the stored one.
-3. The validated `device_id` is forwarded to Keycloak's token exchange so
-   it lands in the JWT claim.
-
-This covers the "device binding for mobile" requirement.
-"""
+"""Device registration and fingerprint validation for mobile auth."""
 
 from __future__ import annotations
 
@@ -63,7 +43,7 @@ async def register_or_validate_device(
     """
     repo = DeviceRepository(db)
 
-    # ── no device_id supplied → first login, generate one ─────────────────
+    # no device_id supplied → first login, generate one
     if not device_id:
         device_id = str(_uuid.uuid4())
 
@@ -72,7 +52,6 @@ async def register_or_validate_device(
     fp_hash = _fingerprint_hash(device_fingerprint) if device_fingerprint else None
 
     if existing is None:
-        # ── new device, register it ────────────────────────────────────────
         await repo.create(
             device_id=device_id,
             user_id=user_id,
@@ -82,7 +61,7 @@ async def register_or_validate_device(
         )
         logger.info("device_registered", device_id=device_id, user_id=user_id)
     else:
-        # ── known device ───────────────────────────────────────────────────
+        #  known device_id but fingerprint mismatch → log a warning (potential risk signal)
         if fp_hash and existing.fingerprint_hash and fp_hash != existing.fingerprint_hash:
             logger.warning(
                 "device_fingerprint_mismatch",

@@ -1,7 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timezone
 from sqlalchemy import select, update, func
-
+import uuid
 from .models import User, UserAddress, KycDocument, OnboardingRequest
 
 
@@ -11,34 +11,51 @@ class UserRepository:
 
     async def get_by_id(self, user_id: str) -> User | None:
         result = await self.db.execute(
-            select(User).where(User.id == str(user_id), User.deleted_at.is_(None))
+            select(User).where(
+                User.id == user_id,
+                User.deleted_at.is_(None)
+            )
         )
         return result.scalar_one_or_none()
 
     async def get_by_mobile(self, mobile: str) -> User | None:
         result = await self.db.execute(
-            select(User).where(User.mobile == mobile, User.deleted_at.is_(None))
+            select(User).where(
+                User.mobile == mobile,
+                User.deleted_at.is_(None)
+            )
         )
         return result.scalar_one_or_none()
 
     async def get_by_email(self, email: str) -> User | None:
         result = await self.db.execute(
-            select(User).where(User.email == email, User.deleted_at.is_(None))
+            select(User).where(
+                User.email == email,
+                User.deleted_at.is_(None)
+            )
         )
         return result.scalar_one_or_none()
 
     async def create_social(self, email: str | None, full_name: str = "") -> User:
-        """Create a user for social login — no mobile required."""
-        user = User(mobile=None, user_type="customer", email=email, full_name=full_name)
+        user = User(
+            mobile=None,
+            user_type="customer",
+            email=email,
+            full_name=full_name
+        )
         self.db.add(user)
-        await self.db.flush()
+        await self.db.commit() 
         await self.db.refresh(user)
         return user
 
     async def create(self, mobile: str, user_type: str = "customer", **kwargs) -> User:
-        user = User(mobile=mobile, user_type=user_type, **kwargs)
+        user = User(
+            mobile=mobile,
+            user_type=user_type,
+            **kwargs
+        )
         self.db.add(user)
-        await self.db.flush()
+        await self.db.commit() 
         await self.db.refresh(user)
         return user
 
@@ -46,8 +63,10 @@ class UserRepository:
         for key, value in kwargs.items():
             if value is not None:
                 setattr(user, key, value)
-        await self.db.flush()
-        await self.db.refresh(user)
+
+        self.db.add(user)             
+        await self.db.commit() 
+        await self.db.refresh(user) 
         return user
 
     async def list_all(self, limit: int = 50, offset: int = 0) -> list[User]:
@@ -62,20 +81,29 @@ class UserRepository:
 
     async def count_all(self) -> int:
         result = await self.db.execute(
-            select(func.count()).select_from(User).where(User.deleted_at.is_(None))
+            select(func.count())
+            .select_from(User)
+            .where(User.deleted_at.is_(None))
         )
         return result.scalar_one()
 
-    async def list_walk_in_by_provider(self, provider_tenant_id: str, limit: int = 20, offset: int = 0) -> list[User]:
+    async def list_walk_in_by_provider(
+        self,
+        provider_tenant_id: str,
+        limit: int = 20,
+        offset: int = 0
+    ) -> list[User]:
         result = await self.db.execute(
             select(User)
-            .where(User.created_by_provider_id == provider_tenant_id, User.deleted_at.is_(None))
+            .where(
+                User.created_by_provider_id == provider_tenant_id,
+                User.deleted_at.is_(None)
+            )
             .order_by(User.created_at.desc())
             .limit(limit)
             .offset(offset)
         )
         return list(result.scalars().all())
-
 
 class AddressRepository:
     def __init__(self, db: AsyncSession):

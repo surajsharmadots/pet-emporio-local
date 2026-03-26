@@ -1,20 +1,6 @@
 """
-Session service — Keycloak-aware token lifecycle management.
-
-Behaviour
-─────────
-When KEYCLOAK_ENABLED=True (production / staging):
-  1. Sync the user into Keycloak (get_or_create_user) so the KC admin
-     console always reflects real users and their roles.
-  2. Issue the token pair via Keycloak token exchange — the returned
-     access token is a proper OIDC JWT signed by Keycloak's realm key.
-  3. Store a local Session row for device-info tracking and for the
-     /sessions management endpoints; the refresh_token_hash records
-     a SHA-256 of the KC refresh token so it can be validated on refresh.
-
-When KEYCLOAK_ENABLED=False (early local dev, Keycloak not running):
-  Falls back to the original self-issued RS256 JWT path.  This lets
-  developers run only auth-service + Postgres without Keycloak.
+Session service — manages token lifecycle. Issues Keycloak OIDC tokens when
+KEYCLOAK_ENABLED=True, falls back to self-issued RS256 JWTs otherwise.
 """
 
 from __future__ import annotations
@@ -49,19 +35,12 @@ async def create_session(
     remember_me: bool = False,
     kc_user_id: str | None = None,
 ) -> tuple[str, str, str]:
-    """
-    Create a session and return (access_token, refresh_token, session_id).
-
-    `roles` should be the real roles resolved from user-service/Keycloak.
-    `kc_user_id` is the Keycloak internal UUID (stored for cross-referencing).
-    `remember_me=True` triples the refresh TTL.
-    """
     repo = SessionRepository(db)
     ttl_days = settings.REFRESH_TOKEN_EXPIRE_DAYS * 3 if remember_me else settings.REFRESH_TOKEN_EXPIRE_DAYS
     expires_at = datetime.now(timezone.utc) + timedelta(days=ttl_days)
 
     if settings.KEYCLOAK_ENABLED and kc_user_id:
-        # ── Keycloak path ──────────────────────────────────────────────────
+        # Keycloak path
         from .keycloak_service import keycloak_service
 
         try:
@@ -82,7 +61,7 @@ async def create_session(
                 user_id, roles or ["customer"], tenant_id
             )
     else:
-        # ── Legacy / fallback path ─────────────────────────────────────────
+        # fallback path
         access_token, refresh_token = _create_local_tokens(
             user_id, roles or ["customer"], tenant_id
         )
@@ -123,13 +102,6 @@ async def refresh_session(
     refresh_token: str,
     session_id: str,
 ) -> tuple[str, str] | None:
-    """
-    Rotate tokens.
-
-    Keycloak path  — delegates to KC's /token endpoint (proper OIDC rotation).
-    Fallback path  — re-issues local JWT and new UUID refresh token.
-    Returns (new_access_token, new_refresh_token) or None if invalid/expired.
-    """
     repo = SessionRepository(db)
     session = await repo.get_by_id(session_id)
 
@@ -150,7 +122,7 @@ async def refresh_session(
     await repo.revoke(session_id)
 
     if settings.KEYCLOAK_ENABLED and session.kc_user_id:
-        # ── Keycloak rotation ──────────────────────────────────────────────
+        # Keycloak rotation
         from .keycloak_service import keycloak_service
         try:
             kc_tokens = await keycloak_service.refresh_token(refresh_token)

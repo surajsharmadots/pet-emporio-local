@@ -14,15 +14,11 @@ try:
 except ImportError:
     pass
 
-# ── JWKS client (dynamic key fetching from Keycloak) ─────────────────────────
-# If KEYCLOAK_URL is set, tokens are verified using Keycloak's JWKS endpoint.
-# This removes the need to maintain JWT_PUBLIC_KEY in every service's .env.
-# Falls back to static PUBLIC_KEY if Keycloak is not configured.
+# Verify tokens via Keycloak JWKS when KEYCLOAK_URL is set, otherwise fall back to static PUBLIC_KEY.
 
 _KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "").rstrip("/")
 _KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "pet-emporio")
 _jwks_client = None
-
 
 def _get_jwks_client():
     global _jwks_client
@@ -35,7 +31,6 @@ def _get_jwks_client():
             pass
     return _jwks_client
 
-
 def _load_public_key(raw: str) -> str:
     """Accept either a full PEM string or a bare base64 key and return PEM."""
     raw = raw.strip()
@@ -45,9 +40,7 @@ def _load_public_key(raw: str) -> str:
         return raw
     return f"-----BEGIN PUBLIC KEY-----\n{raw}\n-----END PUBLIC KEY-----"
 
-
 PUBLIC_KEY = _load_public_key(os.getenv("JWT_PUBLIC_KEY", ""))
-
 
 def _normalise_payload(payload: dict) -> dict:
     """
@@ -74,7 +67,6 @@ def _normalise_payload(payload: dict) -> dict:
         "session_id": payload.get("session_id") or payload.get("sid"),
         "device_id": payload.get("device_id"),
     }
-
 
 def decode_jwt(token: str) -> dict:
     # Try JWKS (Keycloak dynamic key) first
@@ -131,7 +123,6 @@ async def get_current_user(
         token = authorization[7:]
         return decode_jwt(token)
     raise UnauthorizedError()
-
 
 def require_role(*roles: str):
     async def checker(current_user: dict = Depends(get_current_user)) -> dict:

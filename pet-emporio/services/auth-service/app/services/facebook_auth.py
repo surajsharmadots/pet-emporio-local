@@ -13,15 +13,6 @@ FACEBOOK_GRAPH_URL = "https://graph.facebook.com/me"
 
 
 async def verify_facebook_token(access_token: str) -> dict:
-    """
-    Verify a Facebook access_token and return user info.
-
-    Returns:
-        dict with keys: provider_user_id, email (optional), name (optional)
-
-    Raises:
-        AppException 401 if token is invalid or revoked.
-    """
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(

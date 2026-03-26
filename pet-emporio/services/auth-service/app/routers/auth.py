@@ -31,8 +31,6 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-# ─── Internal helpers ─────────────────────────────────────────────────────────
-
 async def _get_or_create_user(mobile: str) -> str:
     """
     Calls user-service to get or create a user record by mobile number.
@@ -104,10 +102,6 @@ async def _sync_to_keycloak(
     roles: list[str],
     tenant_id: str | None,
 ) -> str | None:
-    """
-    Sync the platform user into Keycloak and return the kc_user_id.
-    Returns None if Keycloak is disabled or the sync fails gracefully.
-    """
     if not settings.KEYCLOAK_ENABLED:
         return None
     try:
@@ -148,15 +142,6 @@ async def _social_login(
     user_agent: str | None,
     remember_me: bool = False,
 ) -> tuple[str, str, str]:
-    """
-    Shared logic for all social login providers.
-    Steps:
-      1. Get or create the user record in user-service.
-      2. Upsert the social_accounts record (links provider ID to user).
-      3. Register / validate the device.
-      4. Sync user into Keycloak (if enabled).
-      5. Create a session and return (access_token, refresh_token, session_id).
-    """
     user_service_url = getattr(settings, "USER_SERVICE_URL", "http://user-service:8000")
     user_id = provider_user_id  # fallback if user-service is unreachable
 
@@ -190,7 +175,6 @@ async def _social_login(
         user_agent=user_agent,
     )
 
-    # Fetch roles and sync to Keycloak
     roles = await _get_user_roles(user_id)
     kc_user_id = await _sync_to_keycloak(
         user_id=user_id,
@@ -213,8 +197,6 @@ async def _social_login(
     )
     return at, rt, session_id
 
-
-# ─── OTP ──────────────────────────────────────────────────────────────────────
 
 @router.post("/otp/send")
 async def send_otp(
@@ -246,18 +228,6 @@ async def verify_otp(
     if result in ("invalid", "too_many_attempts"):
         raise AppException(code="OTP_INVALID", message="Invalid OTP.", status_code=400)
 
-    # Check account status before issuing a token.
-    #
-    # Three scenarios:
-    #   1. Account does not exist + portal is "customer" (or unset)
-    #      → Normal customer self-registration. get-or-create will create the account.
-    #
-    #   2. Account does not exist + portal is a provider type
-    #      → Provider tried to log in without submitting an onboarding form first.
-    #        Block them — they must go through /provider/onboard.
-    #
-    #   3. Account exists but is_active=False
-    #      → Provider account is pending admin approval, or was deactivated.
     status = await _check_account_status(body.mobile)
     portal = (body.portal or "customer").lower()
 
@@ -268,7 +238,6 @@ async def verify_otp(
                 message="No account found for this mobile number. Please register via the onboarding form first.",
                 status_code=404,
             )
-        # Customer self-registration — account will be created by get-or-create below.
     elif not status.get("is_active", True):
         user_type = status.get("user_type", "")
         if user_type in _PROVIDER_TYPES:
@@ -287,7 +256,6 @@ async def verify_otp(
     user_agent = request.headers.get("user-agent")
     user_id = await _get_or_create_user(body.mobile)
 
-    # Device binding — register new device or validate returning one
     resolved_device_id = await device_service.register_or_validate_device(
         db,
         user_id=user_id,
@@ -297,10 +265,7 @@ async def verify_otp(
         user_agent=user_agent,
     )
 
-    # Fetch real roles from user-service
     roles = await _get_user_roles(user_id)
-
-    # Sync user into Keycloak (creates/updates KC user record + assigns roles)
     kc_user_id = await _sync_to_keycloak(
         user_id=user_id,
         mobile=body.mobile,
@@ -330,7 +295,7 @@ async def verify_otp(
     ).model_dump())
 
 
-# ─── Token ────────────────────────────────────────────────────────────────────
+# Token
 
 @router.post("/token/refresh/{session_id}")
 async def refresh_token(
@@ -361,7 +326,7 @@ async def refresh_token(
     ).model_dump())
 
 
-# ─── Session ──────────────────────────────────────────────────────────────────
+# Session
 
 @router.post("/logout")
 async def logout(
@@ -419,7 +384,7 @@ async def revoke_session(
     return success_response({"message": "Session revoked."})
 
 
-# ─── Devices ──────────────────────────────────────────────────────────────────
+# Devices
 
 @router.get("/devices")
 async def list_devices(
@@ -453,7 +418,7 @@ async def revoke_device(
     return success_response({"message": "Device revoked."})
 
 
-# ─── MFA ──────────────────────────────────────────────────────────────────────
+# MFA
 
 @router.post("/mfa/setup")
 async def setup_mfa(
@@ -488,7 +453,7 @@ async def verify_mfa(
     return success_response({"message": "MFA enabled successfully."})
 
 
-# ─── Social Login ─────────────────────────────────────────────────────────────
+# Social Login
 
 @router.post("/social/google")
 async def social_google(

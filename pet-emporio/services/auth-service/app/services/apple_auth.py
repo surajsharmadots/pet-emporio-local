@@ -33,21 +33,6 @@ async def _get_apple_public_keys() -> list[dict]:
 
 
 async def verify_apple_token(identity_token: str, audience: str | None = None) -> dict:
-    """
-    Verify an Apple identity_token JWT and return user info.
-
-    Args:
-        identity_token: JWT string from Apple Sign In SDK.
-        audience: Your app's bundle ID (e.g. "com.petemporio.app").
-                  If None, audience check is skipped (dev mode).
-
-    Returns:
-        dict with keys: provider_user_id, email (optional)
-
-    Raises:
-        AppException 401 if token is invalid, expired, or issuer mismatch.
-    """
-    # Decode header to get kid (key ID)
     try:
         unverified_header = pyjwt.get_unverified_header(identity_token)
     except Exception:

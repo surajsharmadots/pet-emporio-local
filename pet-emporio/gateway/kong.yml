@@ -1,8 +1,7 @@
 _format_version: "3.0"
 _transform: true
 
-# ─── Consumers ────────────────────────────────────────────────────────────────
-# One shared consumer represents "any valid pet-emporio token".
+# One shared consumer for all valid pet-emporio tokens.
 # The jwt plugin validates the RS256 signature; our custom plugin extracts claims.
 
 consumers:
@@ -11,8 +10,6 @@ consumers:
       - key: pet-emporio
         algorithm: RS256
         rsa_public_key: REPLACE_PUBLIC_KEY
-
-# ─── Services ────────────────────────────────────────────────────────────────
 
 services:
   - name: auth-service
@@ -74,8 +71,6 @@ services:
     connect_timeout: 10000
     read_timeout: 30000
     write_timeout: 30000
-
-# ─── Routes ──────────────────────────────────────────────────────────────────
 
 routes:
   # Auth — public OTP routes (no JWT)
@@ -398,8 +393,6 @@ routes:
           minute: 100
           policy: local
           limit_by: consumer
-
-# ─── Global Plugins ──────────────────────────────────────────────────────────
 
 plugins:
   - name: cors

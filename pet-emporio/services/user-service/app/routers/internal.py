@@ -30,8 +30,6 @@ class PermissionCheckBody(BaseModel):
     action: str
 
 
-# ─── Called by auth-service after OTP verification or social login ────────────
-
 @router.post("/users/get-or-create")
 async def get_or_create_user(
     body: GetOrCreateRequest,
@@ -41,10 +39,8 @@ async def get_or_create_user(
     rbac_svc = RbacService(db)
 
     if body.mobile:
-        # OTP-based login: look up / create by mobile
         user = await svc.get_or_create_by_mobile(body.mobile)
     elif body.provider and body.provider_user_id:
-        # Social login: look up / create by email or provider_user_id
         user = await svc.get_or_create_by_social(
             email=body.email,
             provider_user_id=body.provider_user_id,
@@ -57,17 +53,14 @@ async def get_or_create_user(
             status_code=422,
         )
 
-    # Assign customer role on first creation
     role_names = await rbac_svc.get_user_role_names(user.id)
     if not role_names:
-        await rbac_svc.assign_default_customer_role(user.id)
+        await rbac_svc.assign_role_by_name(user.id, user.user_type or "customer")
 
     await db.commit()
 
     return success_response({"user_id": str(user.id)})
 
-
-# ─── User lookups ─────────────────────────────────────────────────────────────
 
 @router.get("/users/{user_id}")
 async def get_user_by_id(
@@ -101,8 +94,6 @@ async def get_user_roles(
     return success_response({"roles": roles})
 
 
-# ─── Permission check ─────────────────────────────────────────────────────────
-
 @router.post("/users/{user_id}/permissions/check")
 async def check_permission(
     user_id: str,
@@ -115,23 +106,11 @@ async def check_permission(
                              "resource": body.resource, "action": body.action})
 
 
-# ─── Account status check (called by auth-service before issuing tokens) ──────
-
 @router.get("/users/status-by-mobile/{mobile}")
 async def get_user_status_by_mobile(
     mobile: str,
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Returns the account status for a given mobile number.
-    auth-service calls this after OTP verification to decide whether to
-    issue a session token or block login with an informative error.
-
-    Response fields:
-      exists    — whether a user record exists for this mobile
-      is_active — whether the account is enabled (False = pending/suspended)
-      user_type — the type of account (customer, doctor, seller, etc.)
-    """
     repo = UserRepository(db)
     user = await repo.get_by_mobile(mobile)
     if not user:
@@ -142,8 +121,6 @@ async def get_user_status_by_mobile(
         "user_type": user.user_type,
     })
 
-
-# ─── Tenant lookup ────────────────────────────────────────────────────────────
 
 @router.get("/tenants/{tenant_id}")
 async def get_tenant_by_id(

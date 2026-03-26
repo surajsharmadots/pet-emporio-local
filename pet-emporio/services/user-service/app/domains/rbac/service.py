@@ -20,7 +20,6 @@ SYSTEM_ROLES = [
     {"name": "pharmacist", "display_name": "Pharmacist", "description": "Pharmacy portal access"},
 ]
 
-
 class RbacService:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -71,7 +70,7 @@ class RbacService:
     async def check_permission(self, user_id: uuid.UUID, resource: str, action: str) -> bool:
         return await self.user_role_repo.check_permission(user_id, resource, action)
 
-    # ── Role CRUD ──────────────────────────────────────────────────────────────
+    # Role CRUD
 
     async def create_role(self, name: str, display_name: str, description: str | None = None):
         existing = await self.role_repo.get_by_name(name)
@@ -99,7 +98,7 @@ class RbacService:
             raise AppException(code="NOT_FOUND", message="Role not found", status_code=404)
         return await self.user_role_repo.get_users_by_role(role_id, limit=limit, offset=offset)
 
-    # ── Role Permissions ───────────────────────────────────────────────────────
+    # Role Permissions
 
     async def get_role_permissions(self, role_id: str):
         role = await self.role_repo.get_by_id(role_id)
@@ -121,7 +120,7 @@ class RbacService:
         if not removed:
             raise AppException(code="NOT_FOUND", message="Permission not assigned to this role", status_code=404)
 
-    # ── Sub-Admin Management ───────────────────────────────────────────────────
+    # Sub-Admin Management
 
     async def deactivate_sub_admin(self, user_id: str, role_id: str, reason: str):
         ur = await self.user_role_repo.get_by_user_and_role(user_id, role_id)

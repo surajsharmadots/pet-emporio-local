@@ -16,7 +16,7 @@ KONG_YML="$REPO_ROOT/gateway/kong.yml"
 KONG_ADMIN="${KONG_ADMIN:-http://localhost:8001}"
 TEMP_CONFIG=$(mktemp /tmp/kong-config-XXXXX.yml)
 
-# ── Preflight checks ──────────────────────────────────────────────────────────
+# Preflight checks
 
 if [ ! -f "$PUBLIC_KEY_FILE" ]; then
   echo "ERROR: $PUBLIC_KEY_FILE not found."
@@ -34,7 +34,7 @@ fi
 echo "Kong Admin API: $KONG_ADMIN  ✓"
 echo "Public key:     $PUBLIC_KEY_FILE  ✓"
 
-# ── Generate final config with embedded public key ────────────────────────────
+# Generate final config with embedded public key
 
 python3 - "$REPO_ROOT" "$KONG_YML" "$TEMP_CONFIG" << 'PYEOF'
 import sys
@@ -65,7 +65,7 @@ PYEOF
 
 echo "Temp config:    $TEMP_CONFIG"
 
-# ── Apply config to Kong ──────────────────────────────────────────────────────
+# Apply config to Kong 
 
 echo "Applying config..."
 RESPONSE=$(mktemp)

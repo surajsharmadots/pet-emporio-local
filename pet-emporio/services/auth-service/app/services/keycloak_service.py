@@ -29,7 +29,7 @@ from ..config import settings
 
 logger = get_logger(__name__)
 
-# ── simple in-process admin token cache ───────────────────────────────────────
+# simple in-process admin token cache
 _admin_token_cache: dict = {}
 
 
@@ -59,7 +59,7 @@ class KeycloakService:
     def _admin_url(self) -> str:
         return f"{self._base}/admin/realms/{settings.KEYCLOAK_REALM}"
 
-    # ── Admin token ──────────────────────────────────────────────────────────
+    # Admin token
 
     async def _get_admin_token(self) -> str:
         """Return a cached master-realm admin token, refreshing when near expiry."""
@@ -89,7 +89,7 @@ class KeycloakService:
             )
             return data["access_token"]
 
-    # ── User management ──────────────────────────────────────────────────────
+    # User management
 
     async def get_or_create_user(
         self,
@@ -110,7 +110,7 @@ class KeycloakService:
         headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
         async with httpx.AsyncClient(timeout=10.0) as client:
-            # ── look up by username (= platform_user_id) ───────────────────
+            # look up by username (= platform_user_id)
             resp = await client.get(
                 f"{self._admin_url}/users",
                 params={"username": platform_user_id, "exact": "true"},
@@ -130,7 +130,7 @@ class KeycloakService:
                     platform_user_id, mobile, email, full_name, tenant_id, headers, client
                 )
 
-            # ── assign roles ───────────────────────────────────────────────
+            # assign roles
             if roles:
                 await self._sync_realm_roles(kc_user_id, roles, headers, client)
 
@@ -239,7 +239,7 @@ class KeycloakService:
             )
             resp.raise_for_status()
 
-    # ── Token operations ─────────────────────────────────────────────────────
+    # Token operations
 
     async def _get_service_account_token(self) -> str:
         """
@@ -345,7 +345,7 @@ class KeycloakService:
                 headers={"Authorization": f"Bearer {token}"},
             )
 
-    # ── Role helper ──────────────────────────────────────────────────────────
+    # Role helper
 
     async def get_user_roles(self, kc_user_id: str) -> list[str]:
         """Return the list of realm role names assigned to a Keycloak user."""
@@ -358,7 +358,7 @@ class KeycloakService:
             resp.raise_for_status()
             return [r["name"] for r in resp.json() if not r["name"].startswith("default-roles")]
 
-    # ── Well-known / JWKS ────────────────────────────────────────────────────
+    # Well-known / JWKS
 
     async def get_well_known(self) -> dict:
         """
@@ -385,7 +385,7 @@ class KeycloakService:
             resp.raise_for_status()
             return resp.json()
 
-    # ── Admin: User management ────────────────────────────────────────────────
+    # Admin: User management
 
     async def search_users(
         self,
@@ -437,7 +437,7 @@ class KeycloakService:
             )
             resp.raise_for_status()
 
-    # ── Admin: Session management ─────────────────────────────────────────────
+    # Admin: Session management
 
     async def get_user_sessions(self, kc_user_id: str) -> list[dict]:
         """
@@ -466,7 +466,7 @@ class KeycloakService:
             )
             resp.raise_for_status()
 
-    # ── Admin: Audit events ───────────────────────────────────────────────────
+    # Admin: Audit events
 
     async def get_user_events(
         self,
@@ -491,7 +491,7 @@ class KeycloakService:
             resp.raise_for_status()
             return resp.json()
 
-    # ── Admin: Attack detection ───────────────────────────────────────────────
+    # Admin: Attack detection
 
     async def get_brute_force_status(self, kc_user_id: str) -> dict:
         """

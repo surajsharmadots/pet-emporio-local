@@ -1,4 +1,3 @@
-import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from pe_common.exceptions import AppException
@@ -14,7 +13,6 @@ from ..audit.repository import AuditRepository
 
 logger = get_logger(__name__)
 
-
 _PORTAL_TO_USER_TYPE = {
     "doctor": "doctor",
     "lab": "lab_technician",
@@ -22,7 +20,6 @@ _PORTAL_TO_USER_TYPE = {
     "pharmacy": "pharmacist",
     "groomer": "groomer",
 }
-
 
 class UserService:
     def __init__(self, db: AsyncSession):
@@ -55,17 +52,11 @@ class UserService:
         provider_user_id: str,
         full_name: str = "",
     ):
-        """
-        Used by auth-service for social logins (Google, Facebook, Apple).
-        Lookup order: email → create new (mobile=NULL).
-        """
-        # 1. Try lookup by email
         if email:
             user = await self.repo.get_by_email(email)
             if user:
                 return user
 
-        # 2. Create new social user (no mobile)
         user = await self.repo.create_social(
             email=email,
             full_name=full_name,
@@ -81,13 +72,13 @@ class UserService:
             logger.warning("event_publish_failed", error=str(e))
         return user
 
-    async def get_profile(self, user_id: uuid.UUID):
+    async def get_profile(self, user_id: str):
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise AppException(code="NOT_FOUND", message="User not found", status_code=404)
         return user
 
-    async def update_profile(self, user_id: uuid.UUID, data: UserUpdate):
+    async def update_profile(self, user_id: str, data: UserUpdate):
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise AppException(code="NOT_FOUND", message="User not found", status_code=404)
@@ -99,38 +90,37 @@ class UserService:
             if existing and existing.id != user_id:
                 raise AppException(code="CONFLICT", message="Email already in use", status_code=409)
 
-        user = await self.repo.update(user, **update_data)
-        return user
+        return await self.repo.update(user, **update_data)
 
-    async def list_addresses(self, user_id: uuid.UUID):
+    async def list_addresses(self, user_id: str):
         return await self.address_repo.get_by_user(user_id)
 
-    async def add_address(self, user_id: uuid.UUID, data: AddressCreate):
+    async def add_address(self, user_id: str, data: AddressCreate):
         address_data = data.model_dump()
         return await self.address_repo.create(user_id, address_data)
 
-    async def update_address(self, user_id: uuid.UUID, address_id: uuid.UUID, data: AddressUpdate):
+    async def update_address(self, user_id: str, address_id: str, data: AddressUpdate):
         address = await self.address_repo.get_by_id(address_id)
-        if not address or str(address.user_id) != str(user_id):
+        if not address or address.user_id != user_id:
             raise AppException(code="NOT_FOUND", message="Address not found", status_code=404)
         update_data = data.model_dump(exclude_none=True)
         return await self.address_repo.update(address, update_data)
 
-    async def delete_address(self, user_id: uuid.UUID, address_id: uuid.UUID):
+    async def delete_address(self, user_id: str, address_id: str):
         address = await self.address_repo.get_by_id(address_id)
-        if not address or str(address.user_id) != str(user_id):
+        if not address or address.user_id != user_id:
             raise AppException(code="NOT_FOUND", message="Address not found", status_code=404)
         await self.address_repo.delete(address)
 
-    async def upload_kyc(self, user_id: uuid.UUID, doc_type: str, file_url: str):
+    async def upload_kyc(self, user_id: str, doc_type: str, file_url: str):
         return await self.kyc_repo.create(user_id, doc_type, file_url)
 
-    async def get_kyc_status(self, user_id: uuid.UUID):
+    async def get_kyc_status(self, user_id: str):
         return await self.kyc_repo.get_by_user(user_id)
 
     # Admin operations
-    async def admin_update_user(self, target_user_id: uuid.UUID, data: AdminUserUpdate,
-                                actor_user_id: uuid.UUID):
+    async def admin_update_user(self, target_user_id: str, data: AdminUserUpdate,
+                                actor_user_id: str):
         user = await self.repo.get_by_id(target_user_id)
         if not user:
             raise AppException(code="NOT_FOUND", message="User not found", status_code=404)
@@ -149,7 +139,8 @@ class UserService:
         )
         return user
 
-    async def approve_kyc(self, kyc_id: uuid.UUID, reviewer_id: uuid.UUID):
+    async def approve_kyc(self, kyc_id: str, reviewer_id: str):
+        
         kyc = await self.kyc_repo.get_by_id(kyc_id)
         if not kyc:
             raise AppException(code="NOT_FOUND", message="KYC document not found", status_code=404)
@@ -170,7 +161,7 @@ class UserService:
             logger.warning("event_publish_failed", error=str(e))
         return kyc
 
-    async def complete_registration(self, user_id: uuid.UUID, data: CompleteRegistrationRequest):
+    async def complete_registration(self, user_id: str, data: CompleteRegistrationRequest):
         user = await self.repo.get_by_id(user_id)
         if not user:
             raise AppException(code="NOT_FOUND", message="User not found", status_code=404)
@@ -212,7 +203,7 @@ class UserService:
     async def list_walk_in_customers(self, provider_tenant_id: str, limit: int = 20, offset: int = 0):
         return await self.repo.list_walk_in_by_provider(provider_tenant_id, limit=limit, offset=offset)
 
-    async def reject_kyc(self, kyc_id: uuid.UUID, reviewer_id: uuid.UUID, reason: str):
+    async def reject_kyc(self, kyc_id: str, reviewer_id: str, reason: str):
         kyc = await self.kyc_repo.get_by_id(kyc_id)
         if not kyc:
             raise AppException(code="NOT_FOUND", message="KYC document not found", status_code=404)
@@ -226,7 +217,7 @@ class UserService:
         )
         return kyc
 
-    # ── Provider onboarding ────────────────────────────────────────────────────
+    # Provider onboarding
 
     async def submit_onboarding(self, data: ProviderOnboardRequest):
         """
@@ -273,7 +264,7 @@ class UserService:
 
         return req
 
-    async def approve_onboarding(self, request_id: uuid.UUID, reviewer_id: uuid.UUID):
+    async def approve_onboarding(self, request_id: str, reviewer_id: str):
         """
         Approves an onboarding request.
         Creates the user account (is_active=False so admin must explicitly activate,
@@ -281,7 +272,7 @@ class UserService:
         """
         from ..rbac.service import RbacService
 
-        req = await self.onboarding_repo.get_by_id(str(request_id))
+        req = await self.onboarding_repo.get_by_id(request_id)
         if not req:
             raise AppException(code="NOT_FOUND", message="Onboarding request not found.", status_code=404)
         if req.status != "pending":
@@ -293,7 +284,6 @@ class UserService:
 
         user_type = _PORTAL_TO_USER_TYPE.get(req.portal_type, "customer")
 
-        # Create the user account — active immediately so they can log in
         user = await self.repo.create(
             mobile=req.mobile,
             user_type=user_type,
@@ -303,7 +293,6 @@ class UserService:
             is_verified=True,
         )
 
-        # Assign the matching role via RBAC
         rbac_svc = RbacService(self.db)
         await rbac_svc.assign_role_by_name(user.id, user_type)
 
@@ -332,10 +321,8 @@ class UserService:
 
         return req
 
-    async def reject_onboarding(
-        self, request_id: uuid.UUID, reviewer_id: uuid.UUID, reason: str
-    ):
-        req = await self.onboarding_repo.get_by_id(str(request_id))
+    async def reject_onboarding(self, request_id: str, reviewer_id: str, reason: str):
+        req = await self.onboarding_repo.get_by_id(request_id)
         if not req:
             raise AppException(code="NOT_FOUND", message="Onboarding request not found.", status_code=404)
         if req.status != "pending":

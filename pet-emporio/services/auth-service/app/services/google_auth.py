@@ -1,10 +1,4 @@
-"""
-Google Sign-In token verification.
-
-Flow: Client sends the `id_token` received from Google Sign-In SDK.
-We verify it against Google's public keys via their tokeninfo endpoint.
-No server-side OAuth redirect needed for mobile/SPA clients.
-"""
+"""Google Sign-In token verification via the tokeninfo endpoint."""
 
 import httpx
 from pe_common.exceptions import AppException
@@ -44,7 +38,6 @@ async def verify_google_token(id_token: str, client_id: str | None = None) -> di
             status_code=401,
         )
 
-    # Validate audience (aud) matches our client_id if configured
     if client_id and data.get("aud") != client_id:
         raise AppException(
             code="INVALID_SOCIAL_TOKEN",

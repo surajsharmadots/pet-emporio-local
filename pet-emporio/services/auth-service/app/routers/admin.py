@@ -29,7 +29,7 @@ def _require_keycloak():
         )
 
 
-# ── Well-known / JWKS ────────────────────────────────────────────────────────
+# Well-known / JWKS 
 
 @router.get("/keycloak/well-known")
 async def well_known():
@@ -55,7 +55,7 @@ async def jwks():
     return success_response(data)
 
 
-# ── User management ──────────────────────────────────────────────────────────
+# User management
 
 @router.get("/keycloak/users", dependencies=[_admin_only])
 async def search_users(
@@ -95,7 +95,7 @@ async def disable_user(kc_user_id: str):
     return success_response({"message": "User disabled."})
 
 
-# ── Session management ────────────────────────────────────────────────────────
+# Session management 
 
 @router.get("/keycloak/users/{kc_user_id}/sessions", dependencies=[_admin_only])
 async def get_user_sessions(kc_user_id: str):
@@ -121,7 +121,7 @@ async def delete_session(session_id: str):
     return success_response({"message": "Session revoked."})
 
 
-# ── Audit events ──────────────────────────────────────────────────────────────
+# Audit events
 
 @router.get("/keycloak/users/{kc_user_id}/events", dependencies=[_admin_only])
 async def get_user_events(
@@ -143,7 +143,7 @@ async def get_user_events(
     return success_response(events)
 
 
-# ── Attack detection ──────────────────────────────────────────────────────────
+# Attack detection
 
 @router.get("/keycloak/users/{kc_user_id}/brute-force", dependencies=[_admin_only])
 async def get_brute_force_status(kc_user_id: str):

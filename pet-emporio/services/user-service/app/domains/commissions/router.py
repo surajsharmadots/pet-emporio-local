@@ -12,14 +12,10 @@ from .repository import CommissionRepository
 router = APIRouter(tags=["commissions"])
 internal_router = APIRouter(tags=["commissions-internal"])
 
-
 def _require_admin(current_user: dict):
     roles = current_user.get("roles", [])
     if not any(r in roles for r in ("super_admin", "admin")):
         raise AppException(code="PERMISSION_DENIED", message="Admin access required", status_code=403)
-
-
-# ─── Admin Commission Management ─────────────────────────────────────────────
 
 @router.get("/api/v1/admin/commissions")
 async def list_commissions(
@@ -30,7 +26,6 @@ async def list_commissions(
     repo = CommissionRepository(db)
     configs = await repo.list_all()
     return success_response([CommissionConfigResponse.model_validate(c).model_dump() for c in configs])
-
 
 @router.post("/api/v1/admin/commissions")
 async def create_commission(
@@ -47,7 +42,6 @@ async def create_commission(
     config = await repo.create(**data)
     await db.commit()
     return success_response(CommissionConfigResponse.model_validate(config).model_dump())
-
 
 @router.patch("/api/v1/admin/commissions/{config_id}")
 async def update_commission(
@@ -66,7 +60,6 @@ async def update_commission(
     await db.commit()
     return success_response(CommissionConfigResponse.model_validate(config).model_dump())
 
-
 @router.get("/api/v1/admin/commissions/history")
 async def commission_history(
     db: AsyncSession = Depends(get_db),
@@ -76,9 +69,6 @@ async def commission_history(
     repo = CommissionRepository(db)
     configs = await repo.list_all()
     return success_response([CommissionConfigResponse.model_validate(c).model_dump() for c in configs])
-
-
-# ─── Internal: Resolve Commission for a Tenant ───────────────────────────────
 
 @internal_router.get("/internal/v1/commissions")
 async def resolve_commission(

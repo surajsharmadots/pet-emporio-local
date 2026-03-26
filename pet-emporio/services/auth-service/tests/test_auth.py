@@ -8,15 +8,10 @@ from httpx import AsyncClient
 from app.services import otp_service, jwt_service
 from app.config import settings
 
-
 MOBILE = "+919876543210"
-
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _hash(val: str) -> str:
     return hashlib.sha256(val.encode()).hexdigest()
-
 
 async def _send_and_get_otp(client: AsyncClient, fake_redis, mobile: str = MOBILE) -> str:
     """Send OTP and return the generated OTP from fake redis."""
@@ -24,13 +19,7 @@ async def _send_and_get_otp(client: AsyncClient, fake_redis, mobile: str = MOBIL
     assert resp.status_code == 200
     raw = await fake_redis.get(f"otp:code:{mobile}")
     data = json.loads(raw)
-    # Reverse-lookup: we need to find the actual OTP. In DEV_MODE it's logged.
-    # For tests, we store it deterministically by patching — or brute-force 000000-999999.
-    # Instead, let's directly create a known OTP in redis for verification tests.
-    return data  # returns the stored payload (hash + expiry)
-
-
-# ── OTP Send ──────────────────────────────────────────────────────────────────
+    return data
 
 async def test_send_otp_success(client: AsyncClient):
     resp = await client.post("/api/v1/auth/otp/send", json={"mobile": MOBILE})
@@ -39,10 +28,8 @@ async def test_send_otp_success(client: AsyncClient):
     assert body["success"] is True
     assert body["data"]["message"] == "OTP sent successfully"
 
-
 async def test_send_otp_rate_limit(client: AsyncClient, fake_redis):
     """3rd OTP request within 10 minutes should fail with 429."""
-    # Send 3 times to hit the limit (limit is 3, so 4th should fail)
     for _ in range(settings.OTP_RATE_LIMIT):
         resp = await client.post("/api/v1/auth/otp/send", json={"mobile": MOBILE})
         assert resp.status_code == 200
@@ -54,7 +41,7 @@ async def test_send_otp_rate_limit(client: AsyncClient, fake_redis):
     assert body["error"]["code"] == "RATE_LIMITED"
 
 
-# ── OTP Verify ────────────────────────────────────────────────────────────────
+# OTP Verify
 
 async def test_verify_otp_success(client: AsyncClient, fake_redis):
     """Correct OTP returns access_token and refresh_token."""
@@ -72,7 +59,6 @@ async def test_verify_otp_success(client: AsyncClient, fake_redis):
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"
 
-
 async def test_verify_otp_wrong(client: AsyncClient, fake_redis):
     """Wrong OTP returns 400."""
     known_otp = "123456"
@@ -85,7 +71,6 @@ async def test_verify_otp_wrong(client: AsyncClient, fake_redis):
     })
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "OTP_INVALID"
-
 
 async def test_verify_otp_expired(client: AsyncClient, fake_redis):
     """Expired OTP returns 410."""
@@ -100,7 +85,7 @@ async def test_verify_otp_expired(client: AsyncClient, fake_redis):
     assert resp.json()["error"]["code"] == "OTP_EXPIRED"
 
 
-# ── Refresh Token ─────────────────────────────────────────────────────────────
+# Refresh Token
 
 async def _get_tokens(client: AsyncClient, fake_redis) -> tuple[str, str, str]:
     """Helper: complete OTP flow and return (access_token, refresh_token, session_id).
@@ -118,7 +103,6 @@ async def _get_tokens(client: AsyncClient, fake_redis) -> tuple[str, str, str]:
     data = resp.json()["data"]
     return data["access_token"], data["refresh_token"], data["session_id"]
 
-
 async def test_refresh_token_success(client: AsyncClient, fake_redis):
     _, refresh_token, session_id = await _get_tokens(client, fake_redis)
 
@@ -131,7 +115,6 @@ async def test_refresh_token_success(client: AsyncClient, fake_redis):
     assert "access_token" in data
     assert "refresh_token" in data
 
-
 async def test_refresh_token_invalid(client: AsyncClient, fake_redis):
     _, _, session_id = await _get_tokens(client, fake_redis)
 
@@ -143,7 +126,7 @@ async def test_refresh_token_invalid(client: AsyncClient, fake_redis):
     assert resp.json()["error"]["code"] == "INVALID_TOKEN"
 
 
-# ── Logout ────────────────────────────────────────────────────────────────────
+# Logout
 
 async def test_logout_revokes_session(client: AsyncClient, fake_redis):
     access_token, _, session_id = await _get_tokens(client, fake_redis)
@@ -164,7 +147,7 @@ async def test_logout_revokes_session(client: AsyncClient, fake_redis):
     assert resp2.status_code == 401
 
 
-# ── Internal Routes ───────────────────────────────────────────────────────────
+# Internal Routes
 
 async def test_internal_verify_valid_token(client: AsyncClient, fake_redis):
     access_token, _, session_id = await _get_tokens(client, fake_redis)
@@ -177,7 +160,6 @@ async def test_internal_verify_valid_token(client: AsyncClient, fake_redis):
     assert data["user_id"] is not None
     # The JWT embeds its own random session_id (separate from the DB session.id)
     assert data["session_id"] is not None
-
 
 async def test_internal_verify_expired_token(client: AsyncClient):
     """Manually craft an already-expired token."""
@@ -201,7 +183,7 @@ async def test_internal_verify_expired_token(client: AsyncClient):
     assert "expired" in data["error"].lower()
 
 
-# ── Sessions ──────────────────────────────────────────────────────────────────
+# Sessions
 
 async def test_list_active_sessions(client: AsyncClient, fake_redis):
     """Authenticated user can list their active sessions."""
@@ -216,7 +198,6 @@ async def test_list_active_sessions(client: AsyncClient, fake_redis):
     assert isinstance(sessions, list)
     assert any(str(s["id"]) == session_id for s in sessions)
 
-
 async def test_revoke_specific_session(client: AsyncClient, fake_redis):
     """User can revoke one of their own sessions by session_id."""
     access_token, _, session_id = await _get_tokens(client, fake_redis)
@@ -227,7 +208,6 @@ async def test_revoke_specific_session(client: AsyncClient, fake_redis):
     )
     assert resp.status_code == 200
     assert resp.json()["data"]["message"] == "Session revoked."
-
 
 async def test_revoke_session_not_owned(client: AsyncClient, fake_redis):
     """Revoking a session that does not belong to the current user returns 404."""
@@ -242,7 +222,7 @@ async def test_revoke_session_not_owned(client: AsyncClient, fake_redis):
     assert resp.json()["error"]["code"] == "NOT_FOUND"
 
 
-# ── Devices ───────────────────────────────────────────────────────────────────
+# Devices
 
 async def test_list_registered_devices(client: AsyncClient, fake_redis):
     """After OTP login a device is registered and appears in the device list."""
@@ -256,7 +236,6 @@ async def test_list_registered_devices(client: AsyncClient, fake_redis):
     devices = resp.json()["data"]
     assert isinstance(devices, list)
     assert len(devices) >= 1
-
 
 async def test_revoke_device_success(client: AsyncClient, fake_redis):
     """User can revoke a registered device by device_id."""
@@ -275,7 +254,6 @@ async def test_revoke_device_success(client: AsyncClient, fake_redis):
     assert resp.status_code == 200
     assert resp.json()["data"]["message"] == "Device revoked."
 
-
 async def test_revoke_device_not_found(client: AsyncClient, fake_redis):
     """Revoking an unknown device_id returns 404."""
     access_token, _, _ = await _get_tokens(client, fake_redis)
@@ -288,7 +266,7 @@ async def test_revoke_device_not_found(client: AsyncClient, fake_redis):
     assert resp.json()["error"]["code"] == "NOT_FOUND"
 
 
-# ── MFA ───────────────────────────────────────────────────────────────────────
+# MFA
 
 async def test_mfa_setup(client: AsyncClient, fake_redis):
     """MFA setup returns a TOTP secret and provisioning QR URI."""
@@ -305,7 +283,6 @@ async def test_mfa_setup(client: AsyncClient, fake_redis):
     # QR URI URL-encodes spaces, so check the decoded form
     import urllib.parse
     assert "Pet Emporio" in urllib.parse.unquote(data["qr_uri"])
-
 
 async def test_mfa_verify_valid_code(client: AsyncClient, fake_redis):
     """Correct TOTP code enables MFA on the account."""
@@ -327,7 +304,6 @@ async def test_mfa_verify_valid_code(client: AsyncClient, fake_redis):
     assert resp.status_code == 200
     assert resp.json()["data"]["message"] == "MFA enabled successfully."
 
-
 async def test_mfa_verify_invalid_code(client: AsyncClient, fake_redis):
     """Wrong TOTP code returns 400 MFA_INVALID."""
     access_token, _, _ = await _get_tokens(client, fake_redis)
@@ -345,7 +321,6 @@ async def test_mfa_verify_invalid_code(client: AsyncClient, fake_redis):
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "MFA_INVALID"
 
-
 async def test_mfa_verify_not_setup(client: AsyncClient, fake_redis):
     """Calling MFA verify before setup returns 400 MFA_NOT_SETUP."""
     access_token, _, _ = await _get_tokens(client, fake_redis)
@@ -359,7 +334,7 @@ async def test_mfa_verify_not_setup(client: AsyncClient, fake_redis):
     assert resp.json()["error"]["code"] == "MFA_NOT_SETUP"
 
 
-# ── Social Login ──────────────────────────────────────────────────────────────
+# Social Login
 
 async def test_social_google_login(client: AsyncClient, monkeypatch):
     """Google Sign-In with a valid (mocked) ID token returns a token pair."""
@@ -383,7 +358,6 @@ async def test_social_google_login(client: AsyncClient, monkeypatch):
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"
 
-
 async def test_social_facebook_login(client: AsyncClient, monkeypatch):
     """Facebook Login with a valid (mocked) access token returns a token pair."""
     from unittest.mock import AsyncMock
@@ -405,7 +379,6 @@ async def test_social_facebook_login(client: AsyncClient, monkeypatch):
     assert "access_token" in data
     assert "refresh_token" in data
     assert data["token_type"] == "bearer"
-
 
 async def test_social_apple_login(client: AsyncClient, monkeypatch):
     """Apple Sign In with a valid (mocked) identity token returns a token pair."""
@@ -430,7 +403,7 @@ async def test_social_apple_login(client: AsyncClient, monkeypatch):
     assert data["token_type"] == "bearer"
 
 
-# ── OTP Verify edge cases ─────────────────────────────────────────────────────
+# OTP Verify edge cases
 
 async def test_verify_otp_too_many_attempts(client: AsyncClient, fake_redis):
     """Exceeding the attempt limit locks the OTP and returns OTP_INVALID."""
@@ -445,7 +418,6 @@ async def test_verify_otp_too_many_attempts(client: AsyncClient, fake_redis):
     )
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "OTP_INVALID"
-
 
 async def test_verify_otp_provider_account_not_found(client: AsyncClient, fake_redis, monkeypatch):
     """Valid OTP on a provider portal when no account exists → ACCOUNT_NOT_FOUND."""
@@ -466,7 +438,6 @@ async def test_verify_otp_provider_account_not_found(client: AsyncClient, fake_r
     assert resp.status_code == 404
     assert resp.json()["error"]["code"] == "ACCOUNT_NOT_FOUND"
 
-
 async def test_verify_otp_account_pending_approval(client: AsyncClient, fake_redis, monkeypatch):
     """Provider account that is inactive (pending approval) returns ACCOUNT_PENDING_APPROVAL."""
     from unittest.mock import AsyncMock
@@ -485,7 +456,6 @@ async def test_verify_otp_account_pending_approval(client: AsyncClient, fake_red
     )
     assert resp.status_code == 403
     assert resp.json()["error"]["code"] == "ACCOUNT_PENDING_APPROVAL"
-
 
 async def test_verify_otp_account_inactive(client: AsyncClient, fake_redis, monkeypatch):
     """Deactivated customer account returns ACCOUNT_INACTIVE."""
@@ -507,7 +477,7 @@ async def test_verify_otp_account_inactive(client: AsyncClient, fake_redis, monk
     assert resp.json()["error"]["code"] == "ACCOUNT_INACTIVE"
 
 
-# ── Logout edge case ──────────────────────────────────────────────────────────
+# Logout edge case
 
 async def test_logout_session_not_found(client: AsyncClient):
     """Logout with a non-existent session_id returns 404 NOT_FOUND."""
@@ -520,7 +490,7 @@ async def test_logout_session_not_found(client: AsyncClient):
     assert resp.json()["error"]["code"] == "NOT_FOUND"
 
 
-# ── Internal: Public Key & OTP Validate ──────────────────────────────────────
+# Internal: Public Key & OTP Validate
 
 async def test_internal_public_key(client: AsyncClient, monkeypatch):
     """GET /internal/v1/auth/public-key returns a PEM-formatted public key string."""
@@ -533,7 +503,6 @@ async def test_internal_public_key(client: AsyncClient, monkeypatch):
     assert resp.status_code == 200
     key = resp.json()["data"]["public_key"]
     assert "BEGIN PUBLIC KEY" in key
-
 
 async def test_internal_otp_validate_success(client: AsyncClient, fake_redis):
     """Internal OTP validate with a correct OTP returns valid=True."""
@@ -549,7 +518,6 @@ async def test_internal_otp_validate_success(client: AsyncClient, fake_redis):
     assert resp.status_code == 200
     assert resp.json()["data"]["valid"] is True
 
-
 async def test_internal_otp_validate_invalid(client: AsyncClient, fake_redis):
     """Internal OTP validate with a wrong OTP returns 400 OTP_INVALID."""
     known_otp = "123456"
@@ -563,7 +531,6 @@ async def test_internal_otp_validate_invalid(client: AsyncClient, fake_redis):
     )
     assert resp.status_code == 400
     assert resp.json()["error"]["code"] == "OTP_INVALID"
-
 
 async def test_internal_otp_validate_expired(client: AsyncClient, fake_redis):
     """Internal OTP validate with an expired OTP returns 400 OTP_EXPIRED."""

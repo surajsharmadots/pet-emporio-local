@@ -15,12 +15,10 @@ info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*"; }
 
-# ── 1. Start infrastructure ───────────────────────────────────────────────────
 info "Starting infrastructure services..."
 cd "$INFRA_DIR"
 docker compose up -d postgres rabbitmq redis minio mailhog jaeger keycloak
 
-# ── 2. Wait for PostgreSQL to be healthy ─────────────────────────────────────
 info "Waiting for PostgreSQL to be healthy..."
 MAX_WAIT=60
 ELAPSED=0
@@ -36,7 +34,6 @@ done
 echo ""
 info "PostgreSQL is healthy."
 
-# ── 3. Wait for RabbitMQ to be healthy ───────────────────────────────────────
 info "Waiting for RabbitMQ to be healthy..."
 ELAPSED=0
 until docker compose exec -T rabbitmq rabbitmq-diagnostics ping &>/dev/null; do
@@ -50,7 +47,6 @@ until docker compose exec -T rabbitmq rabbitmq-diagnostics ping &>/dev/null; do
 done
 echo ""
 
-# ── 4. Run Alembic migrations for each service ───────────────────────────────
 info "Running Alembic migrations..."
 
 SERVICES=(
@@ -76,7 +72,6 @@ for svc in "${SERVICES[@]}"; do
   fi
 done
 
-# ── 5. Start microservices with uvicorn ───────────────────────────────────────
 info "Starting microservices..."
 
 declare -A SVC_PORTS=(
@@ -106,16 +101,13 @@ for svc in "${SERVICES[@]}"; do
   fi
 done
 
-# ── 6. Start Kong ─────────────────────────────────────────────────────────────
 info "Starting Kong API Gateway..."
 cd "$INFRA_DIR"
 docker compose up -d kong
 
-# ── 7. Print all service URLs ─────────────────────────────────────────────────
+# Print all service URLs
 echo ""
-echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
-echo -e "${GREEN}  Pet Emporio — Dev Environment Ready              ${NC}"
-echo -e "${GREEN}═══════════════════════════════════════════════════${NC}"
+echo -e "${GREEN}  Pet Emporio dev environment ready${NC}"
 echo ""
 echo "  Infrastructure:"
 echo "    PostgreSQL        →  localhost:5432"

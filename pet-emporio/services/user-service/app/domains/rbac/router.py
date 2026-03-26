@@ -30,8 +30,6 @@ def _require_super_admin(current_user: dict):
         raise AppException(code="PERMISSION_DENIED", message="Super admin access required", status_code=403)
 
 
-# ─── List Roles / Permissions ─────────────────────────────────────────────────
-
 @router.get("/api/v1/admin/roles")
 async def list_roles(
     db: AsyncSession = Depends(get_db),
@@ -53,8 +51,6 @@ async def list_permissions(
     perms = await svc.list_permissions()
     return success_response([PermissionResponse.model_validate(p).model_dump() for p in perms])
 
-
-# ─── Role CRUD ────────────────────────────────────────────────────────────────
 
 @router.post("/api/v1/admin/roles")
 async def create_role(
@@ -118,8 +114,6 @@ async def list_users_by_role(
     ])
 
 
-# ─── Role Permissions ─────────────────────────────────────────────────────────
-
 @router.get("/api/v1/admin/roles/{role_id}/permissions")
 async def list_role_permissions(
     role_id: str,
@@ -163,8 +157,6 @@ async def revoke_permission_from_role(
     return success_response({"message": "Permission revoked from role"})
 
 
-# ─── Existing: Assign Role to User ────────────────────────────────────────────
-
 @router.post("/api/v1/admin/users/{user_id}/roles/assign")
 async def assign_role(
     user_id: str,
@@ -184,8 +176,6 @@ async def assign_role(
     await db.commit()
     return success_response({"message": f"Role '{body.role_name}' assigned to user {user_id}"})
 
-
-# ─── Sub-Admin Management ─────────────────────────────────────────────────────
 
 @router.get("/api/v1/admin/sub-admins")
 async def list_sub_admins(

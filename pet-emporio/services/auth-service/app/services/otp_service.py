@@ -34,7 +34,6 @@ def _normalize_mobile(mobile: str) -> str:
     mobile = mobile.strip().replace(" ", "").replace("-", "")
     if mobile.startswith("+"):
         mobile = mobile[1:]
-    # If only 10 digits (Indian number without country code), add 91
     if len(mobile) == 10:
         mobile = "91" + mobile
     return mobile
@@ -118,7 +117,6 @@ async def send_otp(redis: aioredis.Redis, mobile: str) -> bool:
         "attempts": 0,
     })
     
-    # Debug logging
     logger.info("otp_redis_debug", 
                 otp_key=otp_key, 
                 expire_seconds=settings.OTP_EXPIRE_SECONDS,
@@ -131,11 +129,11 @@ async def send_otp(redis: aioredis.Redis, mobile: str) -> bool:
     logger.info("otp_ttl_check", otp_key=otp_key, ttl=ttl)
 
     if settings.DEV_MODE:
-        # ── Dev mode: print OTP in terminal (no real SMS sent) ──────────────
+        # Dev mode: print OTP in terminal (no real SMS sent)
         logger.info("DEV MODE — OTP not sent via SMS", mobile=mobile, otp=otp)
         return True
     else:
-        # ── Production: send via MSG91 ────────────────────────────────────
+        # Production: send via MSG91
         if not settings.MSG91_AUTH_KEY or not settings.MSG91_TEMPLATE_ID:
             logger.error("msg91_not_configured", detail="MSG91_AUTH_KEY or MSG91_TEMPLATE_ID is missing in .env")
             return False

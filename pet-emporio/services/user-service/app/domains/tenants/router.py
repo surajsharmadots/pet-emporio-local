@@ -12,8 +12,6 @@ from .service import TenantService
 router = APIRouter(tags=["tenants"])
 
 
-# ─── My Tenant ────────────────────────────────────────────────────────────────
-
 @router.post("/api/v1/tenants/register")
 async def register_tenant(
     body: TenantRegister,
@@ -84,8 +82,6 @@ async def get_tenant_public(
     return success_response(TenantResponse.model_validate(tenant).model_dump())
 
 
-# ─── Admin: Tenants ───────────────────────────────────────────────────────────
-
 @router.get("/api/v1/admin/tenants")
 async def admin_list_tenants(
     status: str | None = None,
@@ -130,8 +126,6 @@ async def admin_reject_tenant(
     await db.commit()
     return success_response(TenantResponse.model_validate(tenant).model_dump())
 
-
-# ─── Helpers ─────────────────────────────────────────────────────────────────
 
 def _require_admin(current_user: dict):
     roles = current_user.get("roles", [])

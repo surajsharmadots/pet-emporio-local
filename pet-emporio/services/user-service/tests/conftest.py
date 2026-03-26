@@ -9,9 +9,6 @@ from app.main import app
 from app.database import Base, get_db
 from app.redis_client import get_redis
 
-
-# ── In-memory SQLite DB ───────────────────────────────────────────────────────
-
 @pytest_asyncio.fixture
 async def db_session():
     engine = create_async_engine(
@@ -27,17 +24,11 @@ async def db_session():
 
     await engine.dispose()
 
-
-# ── Fake Redis ────────────────────────────────────────────────────────────────
-
 @pytest_asyncio.fixture
 async def fake_redis():
     redis = FakeRedis(decode_responses=True)
     yield redis
     await redis.aclose()
-
-
-# ── FastAPI test client ───────────────────────────────────────────────────────
 
 @pytest_asyncio.fixture
 async def client(db_session, fake_redis):
@@ -51,9 +42,6 @@ async def client(db_session, fake_redis):
 
     app.dependency_overrides.clear()
 
-
-# ── Auth header helpers ───────────────────────────────────────────────────────
-
 def auth_headers(user_id: str, roles: list[str] | None = None, tenant_id: str | None = None) -> dict:
     """Build X-User-Id / X-User-Roles headers (simulates Kong JWT injection)."""
     headers = {"X-User-Id": user_id}
@@ -63,28 +51,21 @@ def auth_headers(user_id: str, roles: list[str] | None = None, tenant_id: str | 
         headers["X-Tenant-Id"] = tenant_id
     return headers
 
-
 @pytest.fixture
 def customer_id() -> str:
     return str(uuid.uuid4())
-
 
 @pytest.fixture
 def admin_id() -> str:
     return str(uuid.uuid4())
 
-
 @pytest.fixture
 def customer_headers(customer_id) -> dict:
     return auth_headers(customer_id, roles=["customer"])
 
-
 @pytest.fixture
 def admin_headers(admin_id) -> dict:
     return auth_headers(admin_id, roles=["super_admin"])
-
-
-# ── Seed helpers ─────────────────────────────────────────────────────────────
 
 async def create_user_in_db(db: AsyncSession, mobile: str = "+919876543210",
                              user_type: str = "customer") -> dict:
