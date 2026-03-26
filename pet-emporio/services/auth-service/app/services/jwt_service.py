@@ -27,18 +27,18 @@ def _private_key():
 
 
 def _public_key():
-    # Settings (env var / monkeypatched in tests) take priority over file
-    key_content = settings.JWT_PUBLIC_KEY.replace("\\n", "\n")
+    key_content = (settings.JWT_PUBLIC_KEY or "").replace("\\n", "\n")
+
     if key_content.strip():
         if key_content.startswith("-----BEGIN PUBLIC KEY-----"):
             return key_content
         return f"-----BEGIN PUBLIC KEY-----\n{key_content}\n-----END PUBLIC KEY-----"
-    # Fallback: read from file (local dev convenience)
+
     public_key_file = Path(__file__).parent.parent.parent / "public.pem"
     if public_key_file.exists():
         return public_key_file.read_text()
-    raise RuntimeError("JWT_PUBLIC_KEY not set and public.pem not found")
 
+    raise RuntimeError("JWT_PUBLIC_KEY not set and public.pem not found")
 
 def create_access_token(
     user_id: str,

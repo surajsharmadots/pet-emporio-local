@@ -111,14 +111,14 @@ class UserService:
 
     async def update_address(self, user_id: uuid.UUID, address_id: uuid.UUID, data: AddressUpdate):
         address = await self.address_repo.get_by_id(address_id)
-        if not address or address.user_id != user_id:
+        if not address or str(address.user_id) != str(user_id):
             raise AppException(code="NOT_FOUND", message="Address not found", status_code=404)
         update_data = data.model_dump(exclude_none=True)
         return await self.address_repo.update(address, update_data)
 
     async def delete_address(self, user_id: uuid.UUID, address_id: uuid.UUID):
         address = await self.address_repo.get_by_id(address_id)
-        if not address or address.user_id != user_id:
+        if not address or str(address.user_id) != str(user_id):
             raise AppException(code="NOT_FOUND", message="Address not found", status_code=404)
         await self.address_repo.delete(address)
 

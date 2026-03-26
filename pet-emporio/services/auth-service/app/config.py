@@ -25,7 +25,27 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     FACEBOOK_APP_ID: str = ""           # Optional: for token validation via app-level debug_token
     APPLE_BUNDLE_ID: str = ""           # e.g. "com.petemporio.app" — audience claim in Apple JWT
-    USER_SERVICE_URL: str = "http://192.168.9.189:8012"
+    USER_SERVICE_URL: str = "http://localhost:8012"
+
+    # ── Keycloak ──────────────────────────────────────────────────────────────
+    # Auth-service acts as a bridge: verifies OTP / social tokens, then syncs
+    # the user into Keycloak and fetches their real roles before issuing JWTs.
+    KEYCLOAK_URL: str = "http://localhost:8080"
+    KEYCLOAK_REALM: str = "pet-emporio"
+    KEYCLOAK_CLIENT_ID: str = "auth-service"
+    KEYCLOAK_CLIENT_SECRET: str = "auth-service-secret"
+    KEYCLOAK_ADMIN_USER: str = "admin"
+    KEYCLOAK_ADMIN_PASSWORD: str = "admin"
+    # Set False to skip Keycloak sync during early local dev without Keycloak running
+    KEYCLOAK_ENABLED: bool = False
+
+    # Comma-separated list of allowed CORS origins.
+    # Dev default allows local frontend dev servers.
+    # Production: set to your actual domains e.g. "https://petemporio.com,https://admin.petemporio.com"
+    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001,http://localhost:5173"
+
+    # ── Device binding ────────────────────────────────────────────────────────
+    DEVICE_CHALLENGE_TTL_SECONDS: int = 300
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://jaeger:4317"
 

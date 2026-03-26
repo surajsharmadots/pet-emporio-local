@@ -90,7 +90,7 @@ cp .env.example .env
 
 ```bash
 cd infra
-docker-compose up -d postgres rabbitmq redis minio mailhog jaeger
+docker-compose up -d postgres keycloak rabbitmq redis minio mailhog jaeger
 ```
 
 > **Note:** Host ports remapped to avoid conflicts with any local postgres/redis:
@@ -191,7 +191,74 @@ Run tests (no infra needed — uses in-memory DB and fake Redis):
 
 ---
 
-## Step 8 — (Optional) Start Kong API Gateway
+## Step 8 — Configure Keycloak (first-time setup)
+
+Keycloak starts automatically as part of Step 4. On **first boot**, it auto-imports the realm configuration from `keycloak/pet-emporio-realm.json` — no manual UI steps required.
+
+This realm file sets up:
+- **Realm:** `pet-emporio`
+- **Roles:** `customer`, `doctor`, `seller`, `lab_technician`, `groomer`, `pharmacist`, `admin`, `sub_admin`
+- **Clients:** `auth-service` (service account + token exchange), `customer-portal`, `admin-portal`, `doctor-portal`
+- **Protocol mappers** on `auth-service` client: `pe_user_id`, `mobile`, `tenant_id`, `device_id`, realm roles → `roles` claim
+- **Authentication flow:** OTP-first browser login
+- **Token settings:** access token 15 min, SSO idle 30 min, offline session 90 days
+
+### Enable Keycloak in auth-service
+
+By default `KEYCLOAK_ENABLED=False` so auth-service runs without Keycloak (early local dev).
+To enable it, add these to `services/auth-service/.env`:
+
+```env
+KEYCLOAK_ENABLED=true
+KEYCLOAK_URL=http://localhost:8080
+KEYCLOAK_REALM=pet-emporio
+KEYCLOAK_CLIENT_ID=auth-service
+KEYCLOAK_CLIENT_SECRET=auth-service-secret
+KEYCLOAK_ADMIN_USER=admin
+KEYCLOAK_ADMIN_PASSWORD=admin
+```
+
+### ⚠️ One manual step — enable token-exchange permission
+
+The realm JSON sets `token.exchange.grant.enabled = true` on the `auth-service` client,
+but Keycloak also requires a **policy** to be attached to the token-exchange permission.
+This cannot be exported/imported via realm JSON — it must be done once in the UI.
+
+1. Open **http://localhost:8080/admin** → log in (admin / admin)
+2. Switch to the **pet-emporio** realm (top-left dropdown)
+3. Go to **Clients → auth-service → Authorization tab → Permissions**
+4. Click the **token-exchange** permission
+5. Under **Policies**, click **Add policy → Client policy**
+   - Name: `any-client`
+   - Logic: `Positive`
+   - Save
+6. Back in the token-exchange permission, add `any-client` to Policies → Save
+
+Without this step, `issue_token()` (OTP/social login token exchange) will return HTTP 403.
+
+---
+
+### Verify the realm loaded correctly
+
+```bash
+# Check the realm exists
+curl -s http://localhost:8080/realms/pet-emporio | python3 -m json.tool | grep realm
+
+# Log in to the Keycloak admin console
+# URL:      http://localhost:8080/admin
+# Username: admin
+# Password: admin
+# → Go to "pet-emporio" realm → Clients → verify "auth-service" client exists
+```
+
+### Re-importing after a `docker-compose down -v`
+
+Wiping volumes removes Keycloak's database. On next `docker-compose up`, Keycloak will
+auto-import the realm again from `keycloak/pet-emporio-realm.json` — no manual steps needed.
+
+---
+
+## Step 9 — (Optional) Start Kong API Gateway
 
 > Requires at least auth-service running first.
 

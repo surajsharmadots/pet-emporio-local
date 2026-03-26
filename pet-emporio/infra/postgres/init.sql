@@ -1,4 +1,5 @@
 -- Create all 10 service databases
+CREATE DATABASE pe_keycloak;
 CREATE DATABASE pe_auth;
 CREATE DATABASE pe_users;
 CREATE DATABASE pe_catalog;

@@ -17,8 +17,10 @@ from ..schemas.auth import (
     RefreshRequest, LogoutRequest, SessionInfo,
     MfaSetupResponse, MfaVerifyRequest,
     GoogleAuthRequest, FacebookAuthRequest, AppleAuthRequest,
+    DeviceInfo,
 )
 from ..services import otp_service, session_service
+from ..services import device_service
 from ..services.google_auth import verify_google_token
 from ..services.facebook_auth import verify_facebook_token
 from ..services.apple_auth import verify_apple_token
@@ -38,7 +40,7 @@ async def _get_or_create_user(mobile: str) -> str:
     Falls back to the mobile number itself when user-service is unreachable,
     which only happens in early local development before user-service is running.
     """
-    user_service_url = getattr(settings, "USER_SERVICE_URL", "http://192.168.9.189:8012")
+    user_service_url = settings.USER_SERVICE_URL
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(
@@ -76,6 +78,59 @@ async def _check_account_status(mobile: str) -> dict:
     return {"exists": True, "is_active": True, "user_type": "customer"}
 
 
+async def _get_user_roles(user_id: str) -> list[str]:
+    """
+    Fetch the roles assigned to a user from user-service.
+    Returns ["customer"] as a safe default if unreachable.
+    """
+    user_service_url = getattr(settings, "USER_SERVICE_URL", "http://user-service:8000")
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            response = await client.get(
+                f"{user_service_url}/internal/v1/users/{user_id}/roles",
+            )
+            if response.status_code == 200:
+                return response.json()["data"]["roles"]
+    except Exception as e:
+        logger.warning("user_service_roles_fetch_failed", user_id=user_id, error=str(e))
+    return ["customer"]
+
+
+async def _sync_to_keycloak(
+    user_id: str,
+    mobile: str | None,
+    email: str | None,
+    name: str | None,
+    roles: list[str],
+    tenant_id: str | None,
+) -> str | None:
+    """
+    Sync the platform user into Keycloak and return the kc_user_id.
+    Returns None if Keycloak is disabled or the sync fails gracefully.
+    """
+    if not settings.KEYCLOAK_ENABLED:
+        return None
+    try:
+        from ..services.keycloak_service import keycloak_service
+        kc_user_id = await keycloak_service.get_or_create_user(
+            platform_user_id=user_id,
+            mobile=mobile,
+            email=email,
+            full_name=name,
+            roles=roles,
+            tenant_id=tenant_id,
+        )
+        return kc_user_id
+    except Exception as exc:
+        logger.warning(
+            "keycloak_sync_failed",
+            user_id=user_id,
+            error=str(exc),
+            exc_type=type(exc).__name__,
+        )
+        return None
+
+
 _PROVIDER_TYPES = {"doctor", "seller", "lab_technician", "groomer", "pharmacist"}
 
 
@@ -87,7 +142,10 @@ async def _social_login(
     name: str | None,
     access_token: str | None,
     device_info: str | None,
+    device_id: str | None,
+    device_fingerprint: str | None,
     ip: str | None,
+    user_agent: str | None,
     remember_me: bool = False,
 ) -> tuple[str, str, str]:
     """
@@ -95,7 +153,9 @@ async def _social_login(
     Steps:
       1. Get or create the user record in user-service.
       2. Upsert the social_accounts record (links provider ID to user).
-      3. Create a session and return (access_token, refresh_token, session_id).
+      3. Register / validate the device.
+      4. Sync user into Keycloak (if enabled).
+      5. Create a session and return (access_token, refresh_token, session_id).
     """
     user_service_url = getattr(settings, "USER_SERVICE_URL", "http://user-service:8000")
     user_id = provider_user_id  # fallback if user-service is unreachable
@@ -120,12 +180,36 @@ async def _social_login(
     social_repo = SocialAccountRepository(db)
     await social_repo.upsert(user_id, provider, provider_user_id, access_token)
 
+    # Device binding
+    resolved_device_id = await device_service.register_or_validate_device(
+        db,
+        user_id=user_id,
+        device_id=device_id,
+        device_fingerprint=device_fingerprint,
+        ip_address=ip,
+        user_agent=user_agent,
+    )
+
+    # Fetch roles and sync to Keycloak
+    roles = await _get_user_roles(user_id)
+    kc_user_id = await _sync_to_keycloak(
+        user_id=user_id,
+        mobile=None,
+        email=email,
+        name=name,
+        roles=roles,
+        tenant_id=None,
+    )
+
     at, rt, session_id = await session_service.create_session(
         db,
         user_id=user_id,
+        roles=roles,
+        device_id=resolved_device_id,
         device_info=device_info,
         ip_address=ip,
         remember_me=remember_me,
+        kc_user_id=kc_user_id,
     )
     return at, rt, session_id
 
@@ -200,14 +284,41 @@ async def verify_otp(
         )
 
     ip = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
     user_id = await _get_or_create_user(body.mobile)
+
+    # Device binding — register new device or validate returning one
+    resolved_device_id = await device_service.register_or_validate_device(
+        db,
+        user_id=user_id,
+        device_id=body.device_id,
+        device_fingerprint=body.device_fingerprint,
+        ip_address=ip,
+        user_agent=user_agent,
+    )
+
+    # Fetch real roles from user-service
+    roles = await _get_user_roles(user_id)
+
+    # Sync user into Keycloak (creates/updates KC user record + assigns roles)
+    kc_user_id = await _sync_to_keycloak(
+        user_id=user_id,
+        mobile=body.mobile,
+        email=None,
+        name=None,
+        roles=roles,
+        tenant_id=None,
+    )
 
     access_token, refresh_token, session_id = await session_service.create_session(
         db,
         user_id=user_id,
+        roles=roles,
+        device_id=resolved_device_id,
         device_info=body.device_info,
         ip_address=ip,
         remember_me=body.remember_me,
+        kc_user_id=kc_user_id,
     )
 
     return success_response(TokenPair(
@@ -258,9 +369,20 @@ async def logout(
     db: AsyncSession = Depends(get_db),
 ):
     repo = SessionRepository(db)
-    revoked = await repo.revoke(body.session_id)
-    if not revoked:
+    session = await repo.get_by_id(body.session_id)
+    if not session:
         raise AppException(code="NOT_FOUND", message="Session not found.", status_code=404)
+
+    await repo.revoke(body.session_id)
+
+    # Also revoke in Keycloak if this was a KC-issued session
+    if settings.KEYCLOAK_ENABLED and session.kc_user_id:
+        try:
+            from ..services.keycloak_service import keycloak_service
+            await keycloak_service.logout_all_sessions(session.kc_user_id)
+        except Exception as exc:
+            logger.warning("keycloak_logout_failed", error=str(exc))
+
     return success_response({"message": "Logged out successfully."})
 
 
@@ -295,6 +417,40 @@ async def revoke_session(
         raise AppException(code="NOT_FOUND", message="Session not found.", status_code=404)
     await repo.revoke(session_id)
     return success_response({"message": "Session revoked."})
+
+
+# ─── Devices ──────────────────────────────────────────────────────────────────
+
+@router.get("/devices")
+async def list_devices(
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """List all registered devices for the current user."""
+    devices = await device_service.list_devices(db, current_user["user_id"])
+    return success_response([
+        DeviceInfo(
+            device_id=d.device_id,
+            user_agent=d.user_agent,
+            ip_address=d.ip_address,
+            created_at=d.created_at,
+            last_seen_at=d.last_seen_at,
+        ).model_dump()
+        for d in devices
+    ])
+
+
+@router.delete("/devices/{device_id}")
+async def revoke_device(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(get_current_user),
+):
+    """Revoke a registered device. Active sessions on this device remain valid until expiry."""
+    removed = await device_service.revoke_device(db, current_user["user_id"], device_id)
+    if not removed:
+        raise AppException(code="NOT_FOUND", message="Device not found.", status_code=404)
+    return success_response({"message": "Device revoked."})
 
 
 # ─── MFA ──────────────────────────────────────────────────────────────────────
@@ -356,7 +512,10 @@ async def social_google(
         name=info.get("name"),
         access_token=None,
         device_info=body.device_info,
+        device_id=body.device_id,
+        device_fingerprint=body.device_fingerprint,
         ip=ip,
+        user_agent=request.headers.get("user-agent"),
         remember_me=body.remember_me,
     )
     return success_response(TokenPair(
@@ -388,7 +547,10 @@ async def social_facebook(
         name=info.get("name"),
         access_token=body.access_token,
         device_info=body.device_info,
+        device_id=body.device_id,
+        device_fingerprint=body.device_fingerprint,
         ip=ip,
+        user_agent=request.headers.get("user-agent"),
         remember_me=body.remember_me,
     )
     return success_response(TokenPair(
@@ -421,7 +583,10 @@ async def social_apple(
         name=info.get("name"),
         access_token=None,
         device_info=body.device_info,
+        device_id=body.device_id,
+        device_fingerprint=body.device_fingerprint,
         ip=ip,
+        user_agent=request.headers.get("user-agent"),
         remember_me=body.remember_me,
     )
     return success_response(TokenPair(

@@ -11,7 +11,7 @@ from .domains.tenants.router import router as tenants_router
 from .domains.rbac.router import router as rbac_router
 from .domains.commissions.router import router as commissions_router, internal_router as commissions_internal_router
 from .routers.internal import router as internal_router
-
+from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -54,6 +54,17 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url="/redoc",
 )
+
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-User-Id", "X-User-Roles", "X-Tenant-Id"],
+)
+
 
 app.add_exception_handler(AppException, app_exception_handler)
 

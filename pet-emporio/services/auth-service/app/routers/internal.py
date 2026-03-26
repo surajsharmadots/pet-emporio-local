@@ -4,7 +4,7 @@ import redis.asyncio as aioredis
 
 from pe_common.schemas import success_response
 from pe_common.exceptions import AppException
-
+from pathlib import Path
 from ..schemas.auth import InternalVerifyRequest, InternalVerifyResponse
 from ..services import jwt_service, otp_service
 from ..redis_client import get_redis
@@ -15,6 +15,11 @@ router = APIRouter(prefix="/internal/v1/auth", tags=["internal"])
 
 @router.post("/verify")
 async def verify_token(body: InternalVerifyRequest):
+    # NOTE: this endpoint only verifies self-signed RS256 tokens (public.pem).
+    # When KEYCLOAK_ENABLED=True, tokens are signed by Keycloak and cannot be
+    # verified here. In production, Kong validates the token and injects
+    # X-User-Id / X-User-Roles headers — downstream services never call this
+    # endpoint. Use it only in local dev with KEYCLOAK_ENABLED=False.
     result = jwt_service.decode_access_token_safe(body.token)
 
     if result is None:
@@ -34,7 +39,8 @@ async def verify_token(body: InternalVerifyRequest):
 
 @router.get("/public-key")
 async def get_public_key():
-    return success_response({"public_key": settings.JWT_PUBLIC_KEY})
+    public_key_file = Path(__file__).parent.parent.parent / "public.pem"
+    return success_response({"public_key": public_key_file.read_text()})
 
 
 class OtpValidateRequest(BaseModel):
