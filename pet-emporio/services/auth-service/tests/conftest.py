@@ -38,6 +38,8 @@ def patch_settings(monkeypatch):
     monkeypatch.setattr(config.settings, "JWT_PRIVATE_KEY", TEST_PRIVATE_KEY)
     monkeypatch.setattr(config.settings, "JWT_PUBLIC_KEY", TEST_PUBLIC_KEY)
     monkeypatch.setattr(config.settings, "DEV_MODE", True)
+    # Disable Keycloak so tests use self-signed JWTs and local session storage only
+    monkeypatch.setattr(config.settings, "KEYCLOAK_ENABLED", False)
     # pe_common.auth reads PUBLIC_KEY at module import time — patch it too
     import pe_common.auth as pe_auth
     monkeypatch.setattr(pe_auth, "PUBLIC_KEY", TEST_PUBLIC_KEY)

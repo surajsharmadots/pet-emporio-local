@@ -12,13 +12,13 @@ class TenantRepository:
 
     async def get_by_id(self, tenant_id: uuid.UUID) -> Tenant | None:
         result = await self.db.execute(
-            select(Tenant).where(Tenant.id == tenant_id)
+            select(Tenant).where(Tenant.id == str(tenant_id))
         )
         return result.scalar_one_or_none()
 
     async def get_by_owner(self, owner_user_id: uuid.UUID) -> Tenant | None:
         result = await self.db.execute(
-            select(Tenant).where(Tenant.owner_user_id == owner_user_id)
+            select(Tenant).where(Tenant.owner_user_id == str(owner_user_id))
         )
         return result.scalar_one_or_none()
 

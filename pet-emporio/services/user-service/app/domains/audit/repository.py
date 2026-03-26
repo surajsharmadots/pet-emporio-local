@@ -21,10 +21,10 @@ class AuditRepository:
         user_agent: str | None = None,
     ) -> AuditLog:
         entry = AuditLog(
-            user_id=user_id,
+            user_id=str(user_id) if user_id is not None else None,
             action=action,
             resource_type=resource_type,
-            resource_id=resource_id,
+            resource_id=str(resource_id) if resource_id is not None else None,
             old_values=old_values,
             new_values=new_values,
             ip_address=ip_address,
