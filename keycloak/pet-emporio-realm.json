@@ -1,0 +1,289 @@
+{
+  "id": "pet-emporio",
+  "realm": "pet-emporio",
+  "displayName": "Pet Emporio",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+
+  "accessTokenLifespan": 900,
+  "refreshTokenMaxReuse": 0,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespanEnabled": true,
+  "offlineSessionMaxLifespan": 7776000,
+
+  "roles": {
+    "realm": [
+      { "name": "customer",        "description": "Regular customer / pet owner" },
+      { "name": "doctor",          "description": "Veterinary doctor" },
+      { "name": "seller",          "description": "Product seller" },
+      { "name": "lab_technician",  "description": "Clinical lab technician" },
+      { "name": "groomer",         "description": "Pet groomer" },
+      { "name": "pharmacist",      "description": "Pharmacy operator" },
+      { "name": "admin",           "description": "Platform super admin" },
+      { "name": "sub_admin",       "description": "Platform sub-admin with scoped permissions" }
+    ]
+  },
+
+  "clients": [
+    {
+      "clientId": "auth-service",
+      "name": "Auth Service",
+      "description": "Internal service account used by auth-service to manage users and exchange tokens",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "auth-service-secret",
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "publicClient": false,
+      "protocol": "openid-connect",
+      "attributes": {
+        "token.exchange.grant.enabled": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "pe-user-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "pe_user_id",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "pe_user_id",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "mobile",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "true",
+            "user.attribute": "mobile",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "mobile",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "tenant-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "userinfo.token.claim": "false",
+            "user.attribute": "tenant_id",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "tenant_id",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "device-id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usersessionmodel-note-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.session.note": "device_id",
+            "id.token.claim": "false",
+            "access.token.claim": "true",
+            "claim.name": "device_id",
+            "jsonType.label": "String"
+          }
+        },
+        {
+          "name": "realm-roles",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    },
+
+    {
+      "clientId": "customer-portal",
+      "name": "Customer Web Portal",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:3000/*", "https://*.petemporio.com/*"],
+      "webOrigins": ["http://localhost:3000", "https://*.petemporio.com"],
+      "attributes": {
+        "token.exchange.grant.enabled": "true"
+      }
+    },
+
+    {
+      "clientId": "admin-portal",
+      "name": "Admin Web Portal",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:3001/*", "https://admin.petemporio.com/*"],
+      "webOrigins": ["http://localhost:3001", "https://admin.petemporio.com"]
+    },
+
+    {
+      "clientId": "doctor-portal",
+      "name": "Doctor Web Portal",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:3002/*", "https://doctor.petemporio.com/*"],
+      "webOrigins": ["http://localhost:3002", "https://doctor.petemporio.com"]
+    }
+  ],
+
+  "identityProviders": [
+    {
+      "alias": "google",
+      "displayName": "Google",
+      "providerId": "google",
+      "enabled": true,
+      "trustEmail": true,
+      "storeToken": false,
+      "addReadTokenRoleOnCreate": false,
+      "authenticateByDefault": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "${GOOGLE_CLIENT_ID}",
+        "clientSecret": "${GOOGLE_CLIENT_SECRET}",
+        "syncMode": "IMPORT",
+        "defaultScope": "openid profile email",
+        "useJwksUrl": "true"
+      }
+    },
+    {
+      "alias": "facebook",
+      "displayName": "Facebook",
+      "providerId": "facebook",
+      "enabled": true,
+      "trustEmail": false,
+      "storeToken": false,
+      "addReadTokenRoleOnCreate": false,
+      "authenticateByDefault": false,
+      "linkOnly": false,
+      "firstBrokerLoginFlowAlias": "first broker login",
+      "config": {
+        "clientId": "${FACEBOOK_APP_ID}",
+        "clientSecret": "${FACEBOOK_APP_SECRET}",
+        "syncMode": "IMPORT",
+        "defaultScope": "public_profile,email"
+      }
+    }
+  ],
+
+  "authenticationFlows": [
+    {
+      "alias": "pet-emporio otp browser",
+      "description": "OTP-first browser login (all portals)",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false
+        },
+        {
+          "authenticatorFlow": true,
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "flowAlias": "pet-emporio otp forms",
+          "userSetupAllowed": false,
+          "autheticatorFlow": true
+        }
+      ]
+    },
+    {
+      "alias": "pet-emporio otp forms",
+      "description": "Username + OTP verification",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-form",
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "userSetupAllowed": false,
+          "autheticatorFlow": false
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": true,
+          "autheticatorFlow": false
+        }
+      ]
+    }
+  ],
+
+  "scopeMappings": [],
+
+  "clientScopeMappings": {
+    "auth-service": [
+      {
+        "client": "auth-service",
+        "roles": ["customer", "doctor", "seller", "lab_technician", "groomer", "pharmacist", "admin", "sub_admin"]
+      }
+    ]
+  },
+
+  "defaultDefaultClientScopes": ["profile", "email", "roles", "web-origins"],
+  "defaultOptionalClientScopes": ["offline_access", "address", "phone"],
+
+  "browserSecurityHeaders": {
+    "contentSecurityPolicy": "frame-src 'self'; frame-ancestors 'self'; object-src 'none';",
+    "xContentTypeOptions": "nosniff",
+    "xRobotsTag": "none",
+    "xFrameOptions": "SAMEORIGIN",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+  },
+
+  "eventsEnabled": true,
+  "eventsExpiration": 604800,
+  "adminEventsEnabled": true,
+  "adminEventsDetailsEnabled": true
+}
